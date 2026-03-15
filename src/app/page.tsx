@@ -12,6 +12,7 @@ import { detectPlatform } from '@/lib/utils';
 export default function Home() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [recentAnalyses, setRecentAnalyses] = useState<Content[]>([
     {
       id: '1',
@@ -50,11 +51,15 @@ export default function Home() {
       if (result.success && result.data) {
         setRecentAnalyses([result.data, ...recentAnalyses]);
         setUrl('');
+        setToast({ message: '分析完成！已提取核心观点', type: 'success' });
         // TODO: 跳转到分析结果页
         // router.push(`/analysis/${result.data.id}`);
+      } else {
+        setToast({ message: result.error || '解析失败，请重试', type: 'error' });
       }
     } catch (error) {
       console.error('Error:', error);
+      setToast({ message: '网络错误，请检查连接', type: 'error' });
     } finally {
       setLoading(false);
     }

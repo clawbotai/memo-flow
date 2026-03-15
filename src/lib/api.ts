@@ -2,6 +2,13 @@ import { ApiResponse, Analysis, Note, Content } from '@/types';
 
 const API_BASE = '/api';
 
+export class ApiError extends Error {
+  constructor(public code: string, message: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 export async function parseUrl(url: string): Promise<ApiResponse<Content>> {
   try {
     const response = await fetch(`${API_BASE}/parse`, {
@@ -9,11 +16,18 @@ export async function parseUrl(url: string): Promise<ApiResponse<Content>> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url })
     });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new ApiError(error.code || 'PARSE_ERROR', error.error || '解析失败');
+    }
+
     return await response.json();
   } catch (error) {
+    console.error('Parse error:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : '解析失败'
+      error: error instanceof ApiError ? error.message : '网络错误，请检查连接'
     };
   }
 }
