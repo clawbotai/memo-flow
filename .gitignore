@@ -1,0 +1,35 @@
+# OpenClaw 敏感文件 - 不要提交到 Git！
+
+# 环境变量文件（包含 Token）
+.env
+.env.local
+.env.*.local
+
+# 凭证文件
+credentials/
+*.json.enc
+
+# 会话数据
+sessions/
+agents/*/sessions/
+
+# 日志文件
+logs/
+*.log
+
+# 临时文件
+tmp/
+*.tmp
+*.bak
+*.backup
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
