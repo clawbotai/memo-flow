@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { FlowLoader } from '@/components/ui/flow-loader';
 import { parseUrl } from '@/lib/api';
 import { Content } from '@/types';
 import { detectPlatform } from '@/lib/utils';
@@ -70,38 +71,61 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-16">
+    <main className="min-h-screen bg-background relative overflow-hidden">
+      {/* Flow Background Animation */}
+      <div className="absolute inset-0 opacity-5 pointer-events-none">
+        <div className="absolute top-0 -left-1/4 w-96 h-96 bg-primary rounded-full mix-blend-multiply filter blur-3xl animate-flow-bg" />
+        <div className="absolute top-0 -right-1/4 w-96 h-96 bg-primary-light rounded-full mix-blend-multiply filter blur-3xl animate-flow-bg" style={{ animationDelay: '1s' }} />
+        <div className="absolute -bottom-32 left-1/2 w-96 h-96 bg-secondary rounded-full mix-blend-multiply filter blur-3xl animate-flow-bg" style={{ animationDelay: '2s' }} />
+      </div>
+
+      <div className="container mx-auto px-4 py-16 relative z-10">
         <div className="text-center space-y-8">
           <div className="space-y-4">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              🧠 MemoFlow
-            </h1>
-            <p className="text-xl text-muted-foreground">
-              AI 驱动的内容分析与创作助手
+            <div className="inline-flex items-center gap-3">
+              <span className="text-5xl">🌊</span>
+              <h1 className="text-5xl font-bold bg-gradient-to-r from-primary via-primary-light to-primary bg-clip-text text-transparent animate-flow-bg">
+                MemoFlow
+              </h1>
+            </div>
+            <p className="text-2xl text-muted-foreground font-light">
+              Let Your Ideas Flow
             </p>
             <p className="text-lg text-muted-foreground">
-              让灵感自然流淌
+              让灵感如流水般自然流淌
             </p>
           </div>
           
           <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-4">
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="粘贴 YouTube/小宇宙/小红书链接..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                className="pr-32"
-                disabled={loading}
-              />
-              <Button 
-                type="submit" 
-                className="absolute right-1 top-1 h-9"
-                disabled={loading || !url.trim()}
-              >
-                {loading ? '分析中...' : '开始分析'}
-              </Button>
+            <div className="relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-primary-light rounded-lg blur opacity-30 group-hover:opacity-50 transition duration-300" />
+              <div className="relative flex">
+                <Input
+                  type="text"
+                  placeholder="粘贴链接，让灵感流淌..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="flex-1 pr-32 rounded-r-none focus:ring-2 focus:ring-primary focus:ring-offset-0"
+                  disabled={loading}
+                />
+                <Button 
+                  type="submit" 
+                  className="rounded-l-none bg-gradient-to-r from-primary to-primary-light hover:from-primary-dark hover:to-primary transition-all duration-300"
+                  disabled={loading || !url.trim()}
+                >
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <FlowLoader size="sm" />
+                      分析中...
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      开始流动
+                      <span>→</span>
+                    </span>
+                  )}
+                </Button>
+              </div>
             </div>
           </form>
 
@@ -111,24 +135,27 @@ export default function Home() {
               {recentAnalyses.map((item) => (
                 <Card 
                   key={item.id}
-                  className="hover:border-primary/50 transition-colors cursor-pointer"
+                  className="group hover:border-primary/50 hover:shadow-lg transition-all duration-300 cursor-pointer border-l-4 border-l-primary"
                 >
-                  <CardContent className="p-4">
+                  <CardContent className="p-5">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/10 to-primary-light/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform duration-300">
                           {getPlatformIcon(item.platform)}
-                        </span>
+                        </div>
                         <div>
-                          <h3 className="font-medium">{item.title}</h3>
+                          <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">
+                            {item.title}
+                          </h3>
                           <p className="text-sm text-muted-foreground">
                             {item.platform} • {item.publishedAt}
                             {item.duration && ` • ${Math.floor(item.duration / 60)}:${(item.duration % 60).toString().padStart(2, '0')}`}
                           </p>
                         </div>
                       </div>
-                      <span className="text-primary font-medium">
-                        查看 →
+                      <span className="text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-1">
+                        查看
+                        <span className="group-hover:translate-x-1 transition-transform">→</span>
                       </span>
                     </div>
                   </CardContent>
