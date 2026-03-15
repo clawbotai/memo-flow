@@ -4,6 +4,8 @@
 
 从内容消费者 → 内容创作者
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/your-org/memoai)
+
 ---
 
 ## 🎯 产品定位
@@ -14,13 +16,69 @@
 
 ---
 
-## 👥 团队
+## ✨ 功能特点
 
-| 成员 | 角色 | 职责 |
-|------|------|------|
-| 🤖 小 U | UI 设计师 | 界面设计、组件设计 |
-| 🤖 小品 | 产品经理 | 需求细化、用户流程 |
-| 🤖 小码 | 开发工程师 | 代码实现、部署 |
+- 🔗 **多平台支持** - YouTube/小宇宙/小红书/B 站
+- 🧠 **AI 分析** - 自动提取 3-5 个核心观点
+- 💬 **批判思考** - 争议点识别 + 反面观点
+- 📝 **笔记生成** - 一键生成，多平台格式适配
+- 📚 **知识库** - 搜索/筛选/统计
+
+---
+
+## 🚀 快速开始
+
+### 1. 安装依赖
+
+```bash
+npm install
+```
+
+### 2. 配置环境变量
+
+```bash
+cp .env.example .env.local
+```
+
+编辑 `.env.local`:
+
+```bash
+# AI API Keys
+QWEN_API_KEY=your_qwen_api_key
+DEEPSEEK_API_KEY=your_deepseek_api_key
+```
+
+### 3. 运行开发服务器
+
+```bash
+npm run dev
+```
+
+打开 [http://localhost:3000](http://localhost:3000)
+
+---
+
+## 📁 项目结构
+
+```
+memoai/
+├── src/
+│   ├── app/              # Next.js App Router
+│   │   ├── api/          # API 路由
+│   │   ├── analysis/     # 分析结果页
+│   │   ├── note/         # 笔记编辑页
+│   │   ├── library/      # 知识库
+│   │   └── page.tsx      # 首页
+│   ├── components/       # React 组件
+│   │   └── ui/           # shadcn/ui 组件
+│   ├── lib/              # 工具函数
+│   │   ├── api.ts        # API 客户端
+│   │   └── utils.ts      # 通用工具
+│   └── types/            # TypeScript 类型
+├── docs/                 # 文档
+├── design/               # 设计稿
+└── public/               # 静态资源
+```
 
 ---
 
@@ -33,58 +91,63 @@
 
 ---
 
-## 📁 项目结构
+## 📊 开发进度
 
-```
-memoai/
-├── docs/              # 文档
-│   ├── product-requirements.md  # 产品需求
-│   ├── ui-design.md             # UI 设计
-│   ├── tasks.md                 # 任务分配
-│   └── api-spec.md              # API 规范
-├── design/            # 设计稿
-├── src/               # 源代码
-└── README.md
-```
-
----
-
-## 🚀 开发计划
-
-| 阶段 | 时间 | 内容 |
+| 阶段 | 进度 | 状态 |
 |------|------|------|
-| Phase 1 | 3 天 | 产品设计 + UI 设计 |
-| Phase 2 | 7 天 | 核心功能开发 |
-| Phase 3 | 2 天 | 优化 + 部署 |
+| Phase 1 - 产品设计 | 100% | ✅ 完成 |
+| Phase 2 - 功能开发 | 80% | 🔄 进行中 |
+| Phase 3 - 优化部署 | 0% | ⏳ 待开始 |
 
-**MVP 上线**: 12 天
-
----
-
-## 📋 当前状态
-
-- [x] 项目初始化
-- [x] 产品需求文档
-- [x] UI 设计方案
-- [x] 任务分配
-- [ ] UI 设计稿
-- [ ] 技术栈确认
-- [ ] 开发开始
+**总体进度**: 65%
 
 ---
 
-## 💡 核心功能
+## 📝 API 文档
 
-1. **内容解析** - 支持多平台链接
-2. **AI 分析** - 提取核心观点
-3. **批判思考** - 反面观点生成
-4. **内容产出** - 笔记/大纲/二创
+### 解析链接
+
+```bash
+POST /api/parse
+{
+  "url": "https://youtube.com/watch?v=example"
+}
+```
+
+### AI 分析
+
+```bash
+POST /api/analyze
+{
+  "contentId": "content_123"
+}
+```
+
+### 生成笔记
+
+```bash
+POST /api/note/generate
+{
+  "analysisId": "analysis_123",
+  "template": "xiaohongshu"
+}
+```
 
 ---
 
-## 📞 联系方式
+## 👥 团队
 
-项目讨论在 Discord #小分队⌛ 频道
+| 成员 | 角色 |
+|------|------|
+| 🤖 小 U | UI 设计师 |
+| 🤖 小品 | 产品经理 |
+| 🤖 小码 | 开发工程师 |
+
+---
+
+## 📄 License
+
+MIT
 
 ---
 
