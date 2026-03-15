@@ -1,4 +1,4 @@
-# 🧠 MemoAI
+# 🧠 MemoFlow
 
 **AI 驱动的内容分析与创作助手**
 

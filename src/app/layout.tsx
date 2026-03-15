@@ -5,8 +5,8 @@ import "@/styles/globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "MemoAI - AI 内容分析助手",
-  description: "从内容消费者到内容创作者",
+  title: "MemoFlow - AI 内容分析与创作助手",
+  description: "让灵感自然流淌",
 };
 
 export default function RootLayout({

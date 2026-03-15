@@ -75,13 +75,13 @@ export default function Home() {
         <div className="text-center space-y-8">
           <div className="space-y-4">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              🧠 MemoAI
+              🧠 MemoFlow
             </h1>
             <p className="text-xl text-muted-foreground">
               AI 驱动的内容分析与创作助手
             </p>
             <p className="text-lg text-muted-foreground">
-              从内容消费者 → 内容创作者
+              让灵感自然流淌
             </p>
           </div>
           
