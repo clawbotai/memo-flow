@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { FlowLoader } from '@/components/ui/flow-loader';
+import { ToastManager } from '@/components/ui/toast';
 import { parseUrl } from '@/lib/api';
 import { Content } from '@/types';
 import { detectPlatform } from '@/lib/utils';
@@ -100,6 +101,15 @@ export default function Home() {
               让灵感如流水般自然流淌
             </p>
           </div>
+
+          {/* Toast 提示 */}
+          {toast && (
+            <ToastManager
+              message={toast.message}
+              type={toast.type}
+              onClose={() => setToast(null)}
+            />
+          )}
           
           <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-4">
             <div className="relative group">
