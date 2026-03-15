@@ -12,6 +12,7 @@ credentials/
 # 会话数据
 sessions/
 agents/*/sessions/
+/node_modules
 
 # 日志文件
 logs/
