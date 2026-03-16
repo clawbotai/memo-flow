@@ -177,16 +177,6 @@ export default function Home() {
               ))}
             </div>
           </div>
-                      <span className="text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-1">
-                        查看
-                        <span className="group-hover:translate-x-1 transition-transform">→</span>
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
 
           <div className="pt-16">
             <h2 className="text-2xl font-semibold mb-8">功能特点</h2>
