@@ -112,20 +112,19 @@ export default function Home() {
           )}
           
           <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-4">
-            <div className="relative group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-primary-light rounded-lg blur opacity-30 group-hover:opacity-50 transition duration-300" />
-              <div className="relative flex">
+            <div className="relative">
+              <div className="flex">
                 <Input
                   type="text"
                   placeholder="粘贴链接，让灵感流淌..."
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  className="flex-1 pr-32 rounded-r-none focus:ring-2 focus:ring-primary focus:ring-offset-0"
+                  className="flex-1 pr-32 rounded-r-none border-border focus:border-primary focus:ring-1 focus:ring-primary focus:ring-offset-0 shadow-none"
                   disabled={loading}
                 />
                 <Button 
                   type="submit" 
-                  className="rounded-l-none bg-gradient-to-r from-primary to-primary-light hover:from-primary-dark hover:to-primary transition-all duration-300"
+                  className="rounded-l-none bg-gradient-to-r from-primary to-primary-light hover:from-primary-dark hover:to-primary transition-all duration-300 shadow-none"
                   disabled={loading || !url.trim()}
                 >
                   {loading ? (
@@ -146,28 +145,38 @@ export default function Home() {
 
           <div className="pt-16">
             <h2 className="text-2xl font-semibold mb-8">最近分析</h2>
-            <div className="space-y-4 max-w-3xl mx-auto">
+            <div className="space-y-3 max-w-3xl mx-auto">
               {recentAnalyses.map((item) => (
                 <Card 
                   key={item.id}
-                  className="group hover:border-primary/50 hover:shadow-lg transition-all duration-300 cursor-pointer border-l-4 border-l-primary"
+                  className="group hover:bg-primary/5 transition-colors duration-200 cursor-pointer border-l-4 border-l-primary"
                 >
-                  <CardContent className="p-5">
+                  <CardContent className="p-4">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/10 to-primary-light/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform duration-300">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-xl">
                           {getPlatformIcon(item.platform)}
                         </div>
                         <div>
-                          <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">
+                          <h3 className="font-medium text-base group-hover:text-primary transition-colors">
                             {item.title}
                           </h3>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             {item.platform} • {item.publishedAt}
                             {item.duration && ` • ${Math.floor(item.duration / 60)}:${(item.duration % 60).toString().padStart(2, '0')}`}
                           </p>
                         </div>
                       </div>
+                      <span className="text-primary text-sm font-medium flex items-center gap-1">
+                        查看
+                        <span className="text-xs">→</span>
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
                       <span className="text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-1">
                         查看
                         <span className="group-hover:translate-x-1 transition-transform">→</span>
