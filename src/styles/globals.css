@@ -4,48 +4,85 @@
 
 @layer base {
   :root {
+    /* Zinc 50 */
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    
-    /* MemoFlow Brand Colors */
-    --primary: 217 91% 53%;      /* #2563EB - Flow Blue */
-    --primary-foreground: 210 40% 98%;
-    --primary-light: 217 91% 65%; /* #60A5FA */
-    --primary-dark: 217 91% 43%;  /* #1E40AF */
-    
-    --secondary: 330 81% 60%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    
-    --accent: 160 84% 39%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    
-    --border: 214.3 31.8% 91.4%;
-    --radius: 0.75rem; /* 12px - 更柔和 */
+    /* Zinc 950 */
+    --foreground: 240 10% 3.9%;
+
+    /* Zinc 100 */
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+
+    /* Zinc 900 */
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --primary-light: 240 5.9% 30%;
+
+    /* Zinc 100 */
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+
+    /* Zinc 100 */
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+
+    /* Zinc 100 */
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+
+    /* Red 500 */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Zinc 200 */
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 10% 3.9%;
+
+    --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 47% 11%;   /* #0F172A - 深蓝黑 */
-    --foreground: 210 40% 98%;
-    
-    /* MemoFlow Brand Colors - Dark Mode */
-    --primary: 217 91% 65%;      /* #60A5FA - 提亮 */
-    --primary-foreground: 210 40% 98%;
-    --primary-light: 217 91% 75%;
-    --primary-dark: 217 91% 53%;
-    
-    --secondary: 330 81% 60%;
-    --secondary-foreground: 210 40% 98%;
-    
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    
-    --accent: 160 84% 39%;
-    --accent-foreground: 210 40% 98%;
-    
-    --border: 217.2 32.6% 17.5%;
+    /* Zinc 950 */
+    --background: 240 10% 3.9%;
+    /* Zinc 50 */
+    --foreground: 0 0% 98%;
+
+    /* Zinc 950 */
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Zinc 50 */
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --primary-light: 0 0% 80%;
+
+    /* Zinc 800 */
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    /* Zinc 800 */
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+
+    /* Zinc 800 */
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    /* Red 900 */
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Zinc 800 */
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
   }
 }
 
@@ -54,86 +91,15 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
 }
 
 @layer utilities {
-  /* Flow Animation */
-  @keyframes flow-bounce {
-    0%, 100% {
-      transform: scaleY(1);
-    }
-    50% {
-      transform: scaleY(0.5);
-    }
-  }
-
-  .animate-flow-bounce {
-    animation: flow-bounce 0.6s ease-in-out infinite;
-  }
-
-  /* Flow Background */
-  @keyframes flow-bg {
-    0% {
-      background-position: 0% 50%;
-    }
-    50% {
-      background-position: 100% 50%;
-    }
-    100% {
-      background-position: 0% 50%;
-    }
-  }
-
-  .animate-flow-bg {
-    background-size: 200% 200%;
-    animation: flow-bg 3s ease infinite;
-  }
-
-  /* Ripple Effect */
-  @keyframes ripple {
-    0% {
-      transform: scale(1);
-      opacity: 1;
-    }
-    100% {
-      transform: scale(2);
-      opacity: 0;
-    }
-  }
-
-  .animate-ripple {
-    animation: ripple 0.6s ease-out;
-  }
-
-  /* Slide Up Animation */
-  @keyframes slide-up {
-    0% {
-      transform: translateY(20px);
-      opacity: 0;
-    }
-    100% {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
-
-  .animate-slide-up {
-    animation: slide-up 0.3s ease-out;
-  }
-
-  /* Fade In Animation */
-  @keyframes fade-in {
-    0% {
-      opacity: 0;
-    }
-    100% {
-      opacity: 1;
-    }
-  }
-
-  .animate-fade-in {
-    animation: fade-in 0.3s ease-out;
+  /* Linear-style Animations */
+  .animate-in {
+    animation-duration: 150ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
   }
 }

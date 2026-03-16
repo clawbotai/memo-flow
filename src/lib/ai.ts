@@ -158,7 +158,7 @@ function getMockAnalysis(): AIAnalysisResult {
 }
 
 function getMockNote(template: string): string {
-  const notes = {
+  const notes: Record<string, string> = {
     default: `# AI 趋势分析
 
 ## 核心观点

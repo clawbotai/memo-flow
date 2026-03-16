@@ -17,9 +17,9 @@ export function Toast({ message, type = 'info', duration = 3000, onClose }: Toas
   }, [duration, onClose]);
 
   const types = {
-    success: 'bg-green-500 text-white',
-    error: 'bg-red-500 text-white',
-    info: 'bg-primary text-white'
+    success: 'bg-background/95 border border-green-500/20 text-foreground shadow-[0_0_20px_rgba(34,197,94,0.1)]',
+    error: 'bg-background/95 border border-red-500/20 text-foreground shadow-[0_0_20px_rgba(239,68,68,0.1)]',
+    info: 'bg-background/95 border border-primary/20 text-foreground shadow-[0_0_20px_rgba(59,130,246,0.1)]'
   };
 
   const icons = {
@@ -31,7 +31,7 @@ export function Toast({ message, type = 'info', duration = 3000, onClose }: Toas
   return (
     <div
       className={cn(
-        'fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-up z-50',
+        'fixed bottom-4 right-4 px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 animate-slide-up z-50 backdrop-blur-md',
         types[type]
       )}
     >

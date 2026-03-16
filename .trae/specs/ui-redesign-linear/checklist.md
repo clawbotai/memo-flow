@@ -1,0 +1,9 @@
+- [x] Global theme uses Linear-style colors (Zinc/Slate) and variables.
+- [x] Dark mode is refined and works correctly.
+- [x] `Button` component has subtle border and hover "glow" effect.
+- [x] `Input` component has refined focus ring.
+- [x] `Card` component has subtle border and appropriate background.
+- [x] Typography is legible (Inter) and uses correct weights.
+- [x] Page layouts (Analysis, Note, Library) look consistent with the new style.
+- [x] All interactive elements (buttons, links, inputs) function correctly.
+- [x] No visual regressions in responsiveness (mobile/desktop).

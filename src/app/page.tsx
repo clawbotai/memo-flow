@@ -85,7 +85,7 @@ export default function Home() {
         <div className="absolute -bottom-32 left-1/2 w-96 h-96 bg-secondary rounded-full mix-blend-multiply filter blur-3xl animate-flow-bg" style={{ animationDelay: '2s' }} />
       </div>
 
-      <div className="container mx-auto px-4 py-16 relative z-10">
+      <div className="container max-w-screen-xl mx-auto px-4 py-16 relative z-10">
         <div className="text-center space-y-8">
           <div className="space-y-4">
             <div className="inline-flex items-center gap-3">

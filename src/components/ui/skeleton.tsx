@@ -1,11 +1,10 @@
 import { cn } from '@/lib/utils';
 
-interface SkeletonProps {
-  className?: string;
+interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: 'text' | 'title' | 'card' | 'circle';
 }
 
-export function Skeleton({ className, variant = 'text' }: SkeletonProps) {
+export function Skeleton({ className, variant, ...props }: SkeletonProps) {
   const variants = {
     text: 'h-4 w-full',
     title: 'h-8 w-3/4',
@@ -16,10 +15,11 @@ export function Skeleton({ className, variant = 'text' }: SkeletonProps) {
   return (
     <div
       className={cn(
-        'animate-pulse rounded-md bg-muted',
-        variants[variant],
+        'animate-pulse rounded-md bg-primary/10',
+        variant ? variants[variant] : '',
         className
       )}
+      {...props}
     />
   );
 }
@@ -28,8 +28,8 @@ export function CardSkeleton() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <Skeleton variant="circle" className="w-12 h-12" />
-        <div className="space-y-2 flex-1">
+        <Skeleton variant="circle" className="h-12 w-12" />
+        <div className="flex-1 space-y-2">
           <Skeleton variant="title" className="h-6 w-3/4" />
           <Skeleton variant="text" className="h-4 w-1/2" />
         </div>
@@ -42,12 +42,12 @@ export function ViewpointSkeleton() {
   return (
     <div className="space-y-4">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="space-y-3 p-4 border rounded-lg">
+        <div key={i} className="space-y-3 rounded-lg border p-4">
           <div className="flex items-center gap-3">
-            <Skeleton variant="circle" className="w-8 h-8" />
+            <Skeleton variant="circle" className="h-8 w-8" />
             <Skeleton variant="title" className="h-6 w-2/3" />
           </div>
-          <div className="space-y-2 ml-11">
+          <div className="ml-11 space-y-2">
             <Skeleton variant="text" />
             <Skeleton variant="text" />
           </div>
