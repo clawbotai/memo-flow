@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { detectPlatform } from '@/lib/utils';
-import { Content } from '@/types';
+import { Content, Platform } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,14 +13,17 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const platform = detectPlatform(url);
+    const platformName = detectPlatform(url);
     
-    if (platform === 'unknown') {
+    if (platformName === 'unknown') {
       return NextResponse.json(
         { success: false, error: 'Unsupported platform' },
         { status: 400 }
       );
     }
+    
+    // 类型断言：将 string 转换为 Platform 类型
+    const platform = platformName as Platform;
     
     const mockContent: Content = {
       id: `content_${Date.now()}`,
