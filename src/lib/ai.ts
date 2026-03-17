@@ -1,7 +1,6 @@
 // AI API 客户端 - Qwen/DeepSeek
 
 const QWEN_API_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
 export interface AIAnalysisResult {
   viewpoints: Array<{
@@ -17,20 +16,40 @@ export interface AIAnalysisResult {
   tags: string[];
 }
 
-export async function analyzeWithAI(transcript: string): Promise<AIAnalysisResult> {
-  const apiKey = process.env.QWEN_API_KEY || process.env.DEEPSEEK_API_KEY;
+interface QwenAPIResponse {
+  output: {
+    text: string;
+    finish_reason: string;
+  };
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+  request_id: string;
+}
+
+/**
+ * 使用 Qwen API 分析内容
+ * 支持自动重试机制
+ */
+export async function analyzeWithAI(
+  transcript: string, 
+  retries = 3
+): Promise<AIAnalysisResult> {
+  const apiKey = process.env.QWEN_API_KEY;
   
   if (!apiKey) {
-    // 返回模拟数据用于开发测试
+    console.warn('QWEN_API_KEY not configured, using mock data');
     return getMockAnalysis();
   }
 
-  const prompt = `
-请分析以下内容，提取核心观点、争议点和总结：
+  const systemPrompt = '你是一个专业的内容分析师，擅长从视频、播客等内容中提取核心观点、争议点和关键信息。你需要以结构化的 JSON 格式返回分析结果。';
+  
+  const userPrompt = `请分析以下内容，提取核心观点、争议点和总结：
 
 ${transcript}
 
-请按以下 JSON 格式返回：
+请严格按以下 JSON 格式返回（不要包含其他文字）：
 {
   "viewpoints": [
     {"title": "观点标题", "arguments": ["论据 1", "论据 2"]}
@@ -40,36 +59,79 @@ ${transcript}
   ],
   "summary": "内容总结",
   "tags": ["标签 1", "标签 2"]
-}
-`;
+}`;
 
-  try {
-    const response = await fetch(QWEN_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'qwen-turbo',
-        input: {
-          messages: [
-            { role: 'system', content: '你是一个专业的内容分析师，擅长提取核心观点和争议点。' },
-            { role: 'user', content: prompt }
-          ]
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[Qwen API] Attempt ${attempt}/${retries}`);
+      
+      const response = await fetch(QWEN_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'X-DashScope-SSE': 'disable'
+        },
+        body: JSON.stringify({
+          model: 'qwen-turbo',
+          input: {
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ]
+          },
+          parameters: {
+            result_format: 'text',
+            temperature: 0.7,
+            max_tokens: 2000
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          `Qwen API error: ${response.status} ${errorData.message || response.statusText}`
+        );
+      }
+
+      const data: QwenAPIResponse = await response.json();
+      console.log(`[Qwen API] Success, tokens: ${data.usage?.input_tokens}/${data.usage?.output_tokens}`);
+      
+      // 解析 AI 返回的 JSON
+      try {
+        const result = JSON.parse(data.output.text.trim());
+        return validateAnalysisResult(result);
+      } catch (parseError) {
+        console.error('Failed to parse AI response:', data.output.text);
+        if (attempt === retries) {
+          throw new Error('AI response is not valid JSON');
         }
-      })
-    });
-
-    const data = await response.json();
-    
-    // 解析 AI 返回的结果
-    const result = JSON.parse(data.output.text);
-    return result as AIAnalysisResult;
-  } catch (error) {
-    console.error('AI Analysis error:', error);
-    return getMockAnalysis();
+      }
+    } catch (error) {
+      console.error(`[Qwen API] Attempt ${attempt} failed:`, error);
+      if (attempt === retries) {
+        console.error('[Qwen API] All retries failed, using mock data');
+        return getMockAnalysis();
+      }
+      // 等待后重试（指数退避）
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
   }
+  
+  return getMockAnalysis();
+}
+
+/**
+ * 验证 AI 分析结果的结构
+ */
+function validateAnalysisResult(result: any): AIAnalysisResult {
+  return {
+    viewpoints: Array.isArray(result.viewpoints) ? result.viewpoints : [],
+    controversies: Array.isArray(result.controversies) ? result.controversies : [],
+    summary: typeof result.summary === 'string' ? result.summary : '',
+    tags: Array.isArray(result.tags) ? result.tags : []
+  };
 }
 
 export async function generateNote(
