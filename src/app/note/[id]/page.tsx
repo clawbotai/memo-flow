@@ -1,10 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
-export default function NoteEditPage({ params }: { params: { id: string } }) {
+export default function NoteEditPage() {
+  const router = useRouter();
+  const params = useParams();
   const [title, setTitle] = useState('AI 趋势分析笔记');
   const [content, setContent] = useState(`# AI 趋势分析
 
@@ -38,13 +41,19 @@ export default function NoteEditPage({ params }: { params: { id: string } }) {
     console.log('Export to:', platform);
   };
 
+  const handlePublish = () => {
+    // TODO: 保存到知识库并发布
+    alert('笔记已保存到知识库！');
+    router.push('/library');
+  };
+
   return (
     <main className="min-h-screen bg-background">
       <div className="container max-w-screen-xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" className="hover:bg-primary/10">
+            <Button variant="ghost" size="sm" className="hover:bg-primary/10" onClick={() => router.back()}>
               ← 返回
             </Button>
             <div>
@@ -56,7 +65,10 @@ export default function NoteEditPage({ params }: { params: { id: string } }) {
               </p>
             </div>
           </div>
-          <Button className="bg-gradient-to-r from-primary to-primary-light hover:from-primary-dark hover:to-primary transition-all duration-300">
+          <Button
+            className="bg-gradient-to-r from-primary to-primary-light hover:from-primary-dark hover:to-primary transition-all duration-300"
+            onClick={handlePublish}
+          >
             🚀 发布
           </Button>
         </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,6 +12,7 @@ import { Content } from '@/types';
 import { detectPlatform } from '@/lib/utils';
 
 export default function Home() {
+  const router = useRouter();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -53,8 +55,8 @@ export default function Home() {
         setRecentAnalyses([result.data, ...recentAnalyses]);
         setUrl('');
         setToast({ message: '分析完成！已提取核心观点', type: 'success' });
-        // TODO: 跳转到分析结果页
-        // router.push(`/analysis/${result.data.id}`);
+        // 跳转到分析结果页
+        router.push(`/analysis/${result.data.id}`);
       } else {
         setToast({ message: result.error || '解析失败，请重试', type: 'error' });
       }
@@ -147,9 +149,10 @@ export default function Home() {
             <h2 className="text-2xl font-semibold mb-8">最近分析</h2>
             <div className="space-y-3 max-w-3xl mx-auto">
               {recentAnalyses.map((item) => (
-                <Card 
+                <Card
                   key={item.id}
                   className="group hover:bg-primary/5 transition-colors duration-200 cursor-pointer border-l-4 border-l-primary"
+                  onClick={() => router.push(`/analysis/${item.id}`)}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">

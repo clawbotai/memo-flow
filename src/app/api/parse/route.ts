@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { detectPlatform } from '@/lib/utils';
+import { detectPlatform, parseUrlReal } from '@/lib/scraper';
 import { Content, Platform } from '@/types';
 
 export async function POST(request: NextRequest) {
@@ -24,23 +24,22 @@ export async function POST(request: NextRequest) {
     
     // 类型断言：将 string 转换为 Platform 类型
     const platform = platformName as Platform;
-    
-    const mockContent: Content = {
-      id: `content_${Date.now()}`,
-      url,
-      platform,
-      title: '示例内容标题',
-      description: '这是一个示例内容描述',
-      duration: platform === 'youtube' ? 932 : undefined,
-      thumbnail: 'https://via.placeholder.com/1280x720',
-      author: '示例作者',
-      publishedAt: new Date().toISOString()
-    };
-    
-    return NextResponse.json({
-      success: true,
-      data: mockContent
-    });
+
+    try {
+      // 调用真实解析器
+      const content = await parseUrlReal(url);
+
+      return NextResponse.json({
+        success: true,
+        data: content
+      });
+    } catch (error) {
+      console.error('Parse error:', error);
+      return NextResponse.json(
+        { success: false, error: error instanceof Error ? error.message : '解析失败' },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     console.error('Parse error:', error);
     return NextResponse.json(

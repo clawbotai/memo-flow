@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 
 export default function LibraryPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
 
@@ -81,13 +83,18 @@ export default function LibraryPage() {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">📚 知识库</h1>
-            <p className="text-muted-foreground mt-1">
-              管理你的所有分析和笔记
-            </p>
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
+              ← 首页
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold">📚 知识库</h1>
+              <p className="text-muted-foreground mt-1">
+                管理你的所有分析和笔记
+              </p>
+            </div>
           </div>
-          <Button>
+          <Button onClick={() => router.push('/')}>
             ➕ 新建
           </Button>
         </div>
@@ -138,9 +145,10 @@ export default function LibraryPage() {
         {/* Notes Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredNotes.map((note) => (
-            <Card 
+            <Card
               key={note.id}
               className="hover:border-primary/50 transition-colors cursor-pointer group"
+              onClick={() => router.push(`/analysis/${note.id}`)}
             >
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-start justify-between">
@@ -193,7 +201,7 @@ export default function LibraryPage() {
             <p className="text-muted-foreground mb-4">
               粘贴链接开始分析，创建你的第一篇笔记
             </p>
-            <Button>
+            <Button onClick={() => router.push('/')}>
               开始分析
             </Button>
           </div>

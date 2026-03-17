@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Viewpoint, Controversy } from '@/types';
 
 export default function AnalysisPage({ params }: { params: { id: string } }) {
+  const router = useRouter();
   const [expandedTranscript, setExpandedTranscript] = useState(false);
 
   // TODO: 从 API 获取实际数据
@@ -57,7 +59,7 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" className="hover:bg-primary/10">
+            <Button variant="ghost" size="sm" className="hover:bg-primary/10" onClick={() => router.push('/library')}>
               ← 返回
             </Button>
             <div>
@@ -168,7 +170,10 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
 
         {/* Actions */}
         <div className="flex gap-4 sticky bottom-4 bg-background/80 backdrop-blur-sm p-4 rounded-lg border border-border">
-          <Button className="flex-1 bg-gradient-to-r from-primary to-primary-light hover:from-primary-dark hover:to-primary transition-all duration-300">
+          <Button
+            className="flex-1 bg-gradient-to-r from-primary to-primary-light hover:from-primary-dark hover:to-primary transition-all duration-300"
+            onClick={() => router.push(`/note/${params.id}`)}
+          >
             📝 生成笔记
           </Button>
           <Button variant="outline" className="flex-1 hover:bg-primary/10 hover:border-primary">
@@ -176,6 +181,9 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
           </Button>
           <Button variant="outline" className="hover:bg-primary/10 hover:border-primary">
             📄 导出 PDF
+          </Button>
+          <Button variant="ghost" className="hover:bg-primary/10" onClick={() => router.push('/library')}>
+            📚 知识库
           </Button>
         </div>
       </div>
