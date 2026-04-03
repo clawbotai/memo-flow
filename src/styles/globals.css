@@ -4,85 +4,86 @@
 
 @layer base {
   :root {
-    /* Zinc 50 */
-    --background: 0 0% 100%;
-    /* Zinc 950 */
-    --foreground: 240 10% 3.9%;
+    /* Biophilic background - Light cream/beige */
+    --background: 60 10% 98%;
+    /* Deep forest green */
+    --foreground: 140 60% 15%;
 
-    /* Zinc 100 */
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    /* Soft cream card background */
+    --card: 60 8% 96%;
+    --card-foreground: 140 60% 15%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover: 60 8% 96%;
+    --popover-foreground: 140 60% 15%;
 
-    /* Zinc 900 */
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --primary-light: 240 5.9% 30%;
+    /* Forest green */
+    --primary: 140 40% 25%;
+    --primary-foreground: 60 5% 95%;
+    --primary-light: 140 30% 40%;
 
-    /* Zinc 100 */
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    /* Moss green */
+    --secondary: 120 25% 85%;
+    --secondary-foreground: 140 60% 10%;
 
-    /* Zinc 100 */
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    /* Light moss green */
+    --muted: 120 20% 90%;
+    --muted-foreground: 140 30% 35%;
 
-    /* Zinc 100 */
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    /* Earth brown accent */
+    --accent: 30 25% 80%;
+    --accent-foreground: 140 60% 10%;
 
-    /* Red 500 */
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    /* Terracotta */
+    --destructive: 5 60% 50%;
+    --destructive-foreground: 60 5% 95%;
 
-    /* Zinc 200 */
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
+    /* Soft moss green */
+    --border: 120 20% 85%;
+    --input: 120 20% 85%;
+    --ring: 140 40% 25%;
 
-    --radius: 0.5rem;
+    /* Increased border radius for organic feel */
+    --radius: 1rem;
   }
 
   .dark {
-    /* Zinc 950 */
-    --background: 240 10% 3.9%;
-    /* Zinc 50 */
-    --foreground: 0 0% 98%;
+    /* Deep slate/blue-black background, not pure black (Low Glare) */
+    --background: 224 25% 8%;
+    /* 85% brightness for comfortable readability, cascading contrast */
+    --foreground: 220 15% 85%;
 
-    /* Zinc 950 */
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
+    /* Dark card background, slightly segregated from main background */
+    --card: 224 25% 10%;
+    --card-foreground: 220 15% 85%;
 
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 224 25% 10%;
+    --popover-foreground: 220 15% 85%;
 
-    /* Zinc 50 */
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --primary-light: 0 0% 80%;
+    /* Restrained primary color (Subtle muted blue/indigo) */
+    --primary: 217 90% 65%;
+    --primary-foreground: 224 25% 8%;
+    --primary-light: 217 90% 75%;
 
-    /* Zinc 800 */
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
+    /* Muted secondary container */
+    --secondary: 224 20% 15%;
+    --secondary-foreground: 220 15% 85%;
 
-    /* Zinc 800 */
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
+    /* Secondary text / muted elements */
+    --muted: 224 20% 15%;
+    --muted-foreground: 220 10% 60%;
 
-    /* Zinc 800 */
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    /* Ambient hover/active accent */
+    --accent: 224 20% 15%;
+    --accent-foreground: 220 15% 85%;
 
-    /* Red 900 */
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    /* Avoid pure red piercing highlits - dim terracotta */
+    --destructive: 0 60% 45%;
+    --destructive-foreground: 0 0% 95%;
 
-    /* Zinc 800 */
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    /* Thin strokes and dividers */
+    --border: 224 20% 18%;
+    --input: 224 20% 18%;
+    --ring: 217 90% 65%;
   }
 }
 

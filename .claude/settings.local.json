@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "WebFetch(domain:memo.ac)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(npx next:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

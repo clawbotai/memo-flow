@@ -5,7 +5,12 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("rounded-lg border border-border/40 bg-card/50 text-card-foreground shadow-sm backdrop-blur-sm", className)}
+      className={cn(
+        "rounded-2xl border border-border/50 bg-card/60 text-card-foreground shadow-sm backdrop-blur-sm overflow-hidden",
+        // Add organic shape with subtle gradients
+        "relative before:absolute before:inset-0 before:rounded-[calc(theme(borderRadius.2xl)-1px)] before:bg-gradient-to-br before:from-transparent before:via-primary/5 before:to-transparent before:-z-10",
+        className
+      )}
       {...props}
     />
   )

@@ -8,24 +8,24 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'default', size = 'md', ...props }, ref) => {
-    const baseStyles = "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
-    
+    const baseStyles = "inline-flex items-center justify-center whitespace-nowrap rounded-xl text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
+
     const variants = {
-      default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
-      destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm",
-      outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground shadow-sm",
-      secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-sm",
+      default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm shadow-primary/10",
+      destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm shadow-destructive/10",
+      outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground shadow-sm shadow-border/10",
+      secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-sm shadow-secondary/10",
       ghost: "hover:bg-accent hover:text-accent-foreground",
       link: "text-primary underline-offset-4 hover:underline"
     };
-    
+
     const sizes = {
-      sm: "h-9 rounded-md px-3",
-      md: "h-10 px-4 py-2",
-      lg: "h-11 rounded-md px-8",
-      icon: "h-10 w-10"
+      sm: "h-9 rounded-lg px-3",
+      md: "h-10 px-4 py-2 rounded-xl",
+      lg: "h-11 rounded-xl px-8",
+      icon: "h-10 w-10 rounded-xl"
     };
-    
+
     return (
       <button
         className={cn(baseStyles, variants[variant], sizes[size], className)}
