@@ -10,7 +10,8 @@
       "Bash(curl -s -X POST http://localhost:3000/api/parse -H \"Content-Type: application/json\" -d '{\"\"url\"\":\"\"https://www.xiaoyuzhoufm.com/episode/6957c5c32db086f897523bba\"\"}')",
       "Bash(python3 -m json.tool)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(''''标题:'''', d[''''data''''][''''title'''']\\); print\\(''''描述:'''', d[''''data''''][''''description''''][:200]\\)\")",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(''''标题:'''', d[''''data''''][''''title'''']\\); print\\(''''描述:'''', d[''''data''''][''''description''''][:300]\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(''''标题:'''', d[''''data''''][''''title'''']\\); print\\(''''描述:'''', d[''''data''''][''''description''''][:300]\\)\")",
+      "WebSearch"
     ]
   }
 }

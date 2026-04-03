@@ -2,61 +2,13 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "@/styles/globals.css";
 import { cn } from "@/lib/utils";
+import Link from 'next/link';
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: {
-    default: 'MemoFlow - AI 内容分析与创作助手',
-    template: '%s | MemoFlow'
-  },
-  description: '让灵感自然流淌。AI 驱动的内容分析与创作助手，支持 YouTube、小宇宙、小红书等多平台内容解析与笔记生成。',
-  keywords: ['AI', '内容分析', '笔记工具', '创作助手', 'YouTube 解析', '播客转文字', '小红书'],
-  authors: [{ name: 'MemoFlow Team' }],
-  creator: 'MemoFlow',
-  openGraph: {
-    type: 'website',
-    locale: 'zh_CN',
-    url: 'https://memo-flow.vercel.app',
-    title: 'MemoFlow - AI 内容分析与创作助手',
-    description: '让灵感自然流淌。AI 驱动的内容分析与创作助手。',
-    siteName: 'MemoFlow',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'MemoFlow',
-      },
-    ],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'MemoFlow',
-    description: 'AI 内容分析与创作助手',
-    images: ['/og-image.png'],
-    creator: '@memoflow',
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
-    },
-  },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-  },
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0F172A' },
-  ],
+  title: "MemoFlow - 播客转录工具",
+  description: "小宇宙播客一键转录为文字",
 };
 
 export default function RootLayout({
@@ -72,7 +24,33 @@ export default function RootLayout({
           inter.className
         )}
       >
-        {children}
+        <div className="min-h-screen flex flex-col">
+          {/* Navigation Bar */}
+          <nav className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+            <div className="container mx-auto px-4">
+              <div className="flex items-center h-16">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🌊</span>
+                  <Link href="/" className="text-xl font-bold bg-gradient-to-r from-primary to-primary-light bg-clip-text text-transparent">
+                    MemoFlow
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </nav>
+
+          {/* Main Content */}
+          <main className="flex-1">
+            {children}
+          </main>
+
+          {/* Footer */}
+          <footer className="border-t py-8">
+            <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+              <p>&copy; {new Date().getFullYear()} MemoFlow - 播客转录工具</p>
+            </div>
+          </footer>
+        </div>
       </body>
     </html>
   );
