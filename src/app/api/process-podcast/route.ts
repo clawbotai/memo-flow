@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchEpisodeInfo } from '@/lib/xiaoyuzhou';
-import { getWhisperConfig } from '@/lib/whisper-config';
+import { getWhisperConfig, resolveWhisperConfigPaths } from '@/lib/whisper-config';
 import { existsSync } from 'fs';
 import { writeFile, mkdir, unlink, readFile } from 'fs/promises';
 import path from 'path';
@@ -195,7 +195,7 @@ async function processInBackground(taskId: string, url: string) {
     wavPath = await convertToWav(audioPath);
 
     // Stage 4: 转录
-    const config = getWhisperConfig();
+    const config = resolveWhisperConfigPaths(getWhisperConfig());
     const segments: TranscribeSegment[] = [];
     let lastWriteTime = 0;
     let currentProgress = 30;
@@ -352,7 +352,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 验证 whisper 环境
-    const config = getWhisperConfig();
+    const config = resolveWhisperConfigPaths(getWhisperConfig());
 
     if (!existsSync(config.whisperPath)) {
       return NextResponse.json(

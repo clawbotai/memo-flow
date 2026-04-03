@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { getWhisperConfig, saveWhisperConfig } from '@/lib/whisper-config';
+import { getWhisperConfig, saveWhisperConfig, resolveWhisperConfigPaths, toProjectDisplayPath } from '@/lib/whisper-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +14,25 @@ interface InstallProgress {
   status: 'cloning' | 'compiling' | 'completed' | 'error';
   step: string;
   error?: string;
+}
+
+function getWhisperCliCandidates(): string[] {
+  const isWindows = process.platform === 'win32';
+  const binaryName = isWindows ? 'whisper-cli.exe' : 'whisper-cli';
+  const candidates = [
+    path.join(WHISPER_DIR, 'build', 'bin', binaryName),
+  ];
+
+  if (isWindows) {
+    candidates.unshift(path.join(WHISPER_DIR, 'build', 'bin', 'Release', binaryName));
+  }
+
+  return candidates;
+}
+
+function resolveWhisperCliPath(): string {
+  const candidates = getWhisperCliCandidates();
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
 }
 
 function writeProgress(progress: InstallProgress): void {
@@ -62,7 +81,7 @@ async function installWhisperInBackground(): Promise<void> {
     }
 
     // Step 2: Ensure cmake is available
-    const cliBinary = path.join(WHISPER_DIR, 'build', 'bin', 'whisper-cli');
+    const cliBinary = resolveWhisperCliPath();
     if (!fs.existsSync(cliBinary)) {
       try {
         await execAsync('cmake --version');
@@ -78,13 +97,14 @@ async function installWhisperInBackground(): Promise<void> {
     }
 
     // Verify
-    if (!fs.existsSync(cliBinary)) {
+    const installedCliBinary = resolveWhisperCliPath();
+    if (!fs.existsSync(installedCliBinary)) {
       throw new Error('编译完成但未找到 whisper-cli 可执行文件');
     }
 
     // Update config
     const config = getWhisperConfig();
-    config.whisperPath = cliBinary;
+    config.whisperPath = toProjectDisplayPath(installedCliBinary);
     saveWhisperConfig(config);
 
     writeProgress({ status: 'completed', step: 'whisper.cpp 安装完成' });
@@ -102,7 +122,7 @@ async function installWhisperInBackground(): Promise<void> {
 export async function POST() {
   try {
     // Check if already installed
-    const config = getWhisperConfig();
+    const config = resolveWhisperConfigPaths(getWhisperConfig());
     if (fs.existsSync(config.whisperPath)) {
       return NextResponse.json({
         success: true,

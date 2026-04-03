@@ -36,6 +36,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const currentConfig = getWhisperConfig();
 
     // 验证请求体
     if (!body || typeof body !== 'object') {
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
       modelPath: String(body.modelPath),
       modelName: String(body.modelName),
       threads: Number(body.threads),
-      outputDir: body.outputDir ? String(body.outputDir) : undefined as any,
+      outputDir: body.outputDir ? String(body.outputDir) : currentConfig.outputDir,
     };
 
     // 保存配置

@@ -3,20 +3,85 @@
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { WhisperConfig } from '@/types';
 
 // 配置文件路径
 const CONFIG_FILE_PATH = path.join(process.cwd(), '.whisper-config.json');
+const PROJECT_ROOT = process.cwd();
+const PROJECT_NAME = path.basename(PROJECT_ROOT);
+const PROJECT_PARENT = path.dirname(PROJECT_ROOT);
 
-// 默认配置
-const DEFAULT_CONFIG: WhisperConfig = {
-  whisperPath: path.join(process.cwd(), 'whisper.cpp/build/bin/whisper-cli'),
-  modelPath: path.join(process.cwd(), 'models/ggml-small.bin'),
-  modelName: 'small',
-  threads: 4,
-  outputDir: path.join(os.homedir(), 'Documents', 'memo-flow-transcripts'),
-};
+function startsWithProjectName(inputPath: string): boolean {
+  return inputPath === PROJECT_NAME
+    || inputPath.startsWith(`${PROJECT_NAME}/`)
+    || inputPath.startsWith(`${PROJECT_NAME}\\`);
+}
+
+export function resolveConfigPath(inputPath: string): string {
+  if (!inputPath) return inputPath;
+  if (path.isAbsolute(inputPath)) return inputPath;
+
+  return startsWithProjectName(inputPath)
+    ? path.resolve(PROJECT_PARENT, inputPath)
+    : path.resolve(PROJECT_ROOT, inputPath);
+}
+
+export function toProjectDisplayPath(inputPath: string): string {
+  if (!inputPath) return inputPath;
+
+  const resolvedPath = path.isAbsolute(inputPath) ? inputPath : path.resolve(PROJECT_ROOT, inputPath);
+  const relativeToProjectRoot = path.relative(PROJECT_ROOT, resolvedPath);
+
+  if (
+    relativeToProjectRoot
+    && relativeToProjectRoot !== '.'
+    && !relativeToProjectRoot.startsWith('..')
+    && !path.isAbsolute(relativeToProjectRoot)
+  ) {
+    return path.join(PROJECT_NAME, relativeToProjectRoot);
+  }
+
+  return inputPath;
+}
+
+function getDefaultOutputDir(): string {
+  return path.join(PROJECT_NAME, 'transcripts');
+}
+
+function getDefaultModelPath(modelName: string = 'small'): string {
+  return path.join(PROJECT_NAME, 'models', `ggml-${modelName}.bin`);
+}
+
+function getWhisperBinaryCandidates(): string[] {
+  const isWindows = process.platform === 'win32';
+  const binaryName = isWindows ? 'whisper-cli.exe' : 'whisper-cli';
+  const candidates = [
+    path.join(PROJECT_NAME, 'whisper.cpp', 'build', 'bin', binaryName),
+  ];
+
+  if (isWindows) {
+    candidates.unshift(
+      path.join(PROJECT_NAME, 'whisper.cpp', 'build', 'bin', 'Release', binaryName)
+    );
+  }
+
+  return candidates;
+}
+
+function getDefaultWhisperPath(): string {
+  const candidates = getWhisperBinaryCandidates();
+  return candidates.find((candidate) => fs.existsSync(resolveConfigPath(candidate))) ?? candidates[0];
+}
+
+function getDefaultConfig(): WhisperConfig {
+  return {
+    whisperPath: getDefaultWhisperPath(),
+    modelPath: getDefaultModelPath('small'),
+    modelName: 'small',
+    threads: 4,
+    outputDir: getDefaultOutputDir(),
+  };
+}
 
 /**
  * 格式化文件大小为可读字符串
@@ -55,12 +120,14 @@ function mergeWithEnv(config: WhisperConfig): WhisperConfig {
  * @returns WhisperConfig 配置对象
  */
 export function getWhisperConfig(): WhisperConfig {
+  const defaultConfig = getDefaultConfig();
+
   try {
     if (fs.existsSync(CONFIG_FILE_PATH)) {
       const fileContent = fs.readFileSync(CONFIG_FILE_PATH, 'utf8');
       const savedConfig = JSON.parse(fileContent) as Partial<WhisperConfig>;
       const mergedConfig = {
-        ...DEFAULT_CONFIG,
+        ...defaultConfig,
         ...savedConfig,
       };
       return mergeWithEnv(mergedConfig);
@@ -70,7 +137,7 @@ export function getWhisperConfig(): WhisperConfig {
   }
 
   // 配置文件不存在或读取失败，返回默认值（合并环境变量）
-  return mergeWithEnv({ ...DEFAULT_CONFIG });
+  return mergeWithEnv(defaultConfig);
 }
 
 /**
@@ -104,4 +171,13 @@ export function inferModelName(modelPath: string): string {
   if (fileName.includes('tiny')) return 'tiny';
   if (fileName.includes('base')) return 'base';
   return 'unknown';
+}
+
+export function resolveWhisperConfigPaths(config: WhisperConfig): WhisperConfig {
+  return {
+    ...config,
+    whisperPath: resolveConfigPath(config.whisperPath),
+    modelPath: resolveConfigPath(config.modelPath),
+    outputDir: resolveConfigPath(config.outputDir),
+  };
 }

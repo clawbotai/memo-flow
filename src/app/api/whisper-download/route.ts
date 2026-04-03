@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { saveWhisperConfig, getWhisperConfig } from '@/lib/whisper-config';
+import { saveWhisperConfig, getWhisperConfig, toProjectDisplayPath } from '@/lib/whisper-config';
 
 // 模型下载 URL 映射（使用 Hugging Face 镜像源）
 const MODEL_URLS: Record<string, string> = {
@@ -131,7 +131,7 @@ async function downloadModelInBackground(modelName: string): Promise<void> {
 
     // 下载完成，更新配置
     const config = getWhisperConfig();
-    config.modelPath = targetPath;
+    config.modelPath = toProjectDisplayPath(targetPath);
     config.modelName = modelName;
     saveWhisperConfig(config);
     
@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
     if (fs.existsSync(targetPath)) {
       // 模型已存在，更新配置并返回
       const config = getWhisperConfig();
-      config.modelPath = targetPath;
+      config.modelPath = toProjectDisplayPath(targetPath);
       config.modelName = modelName;
       saveWhisperConfig(config);
       return NextResponse.json({

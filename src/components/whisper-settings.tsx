@@ -1,14 +1,24 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, Download, Loader2, Settings, Terminal } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Download,
+  Loader2,
+  Monitor,
+  Moon,
+  Settings,
+  Sun,
+  Terminal,
+} from "lucide-react";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -20,6 +30,8 @@ interface WhisperSettingsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
+type SettingsSection = "general" | "whisper";
 
 interface DownloadProgress {
   status: "idle" | "downloading" | "completed" | "error";
@@ -36,6 +48,26 @@ interface InstallProgress {
   error?: string;
 }
 
+const SETTINGS_SECTIONS: Array<{
+  id: SettingsSection;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}> = [
+  {
+    id: "general",
+    label: "通用",
+    description: "主题外观",
+    icon: <Settings className="h-4 w-4" />,
+  },
+  {
+    id: "whisper",
+    label: "Whisper 设置",
+    description: "本地转录环境",
+    icon: <Terminal className="h-4 w-4" />,
+  },
+];
+
 const MODEL_OPTIONS = [
   {
     id: "small" as const,
@@ -51,6 +83,27 @@ const MODEL_OPTIONS = [
   },
 ];
 
+const THEME_OPTIONS = [
+  {
+    id: "system" as const,
+    label: "跟随系统",
+    description: "自动匹配当前设备的浅色或深色外观",
+    icon: Monitor,
+  },
+  {
+    id: "light" as const,
+    label: "浅色",
+    description: "使用浅米色和森林绿的明亮界面",
+    icon: Sun,
+  },
+  {
+    id: "dark" as const,
+    label: "深色",
+    description: "使用低眩光的深色阅读界面",
+    icon: Moon,
+  },
+];
+
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -59,7 +112,99 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
-export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
+function GeneralSettingsPanel({ visible }: { visible: boolean }) {
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const currentTheme = mounted ? (theme ?? "system") : "system";
+
+  return (
+    <section aria-hidden={!visible} className={cn("space-y-6", !visible && "hidden")}>
+      <div className="space-y-1">
+        <h3 className="text-lg font-semibold">通用</h3>
+        <p className="text-sm text-muted-foreground">
+          管理应用的主题外观。主题切换会立即生效并自动保存。
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-medium">主题</h4>
+            <p className="mt-1 text-sm text-muted-foreground">
+              选择 MemoFlow 的显示模式。
+              {mounted && resolvedTheme && (
+                <span className="ml-1">当前实际显示为{resolvedTheme === "dark" ? "深色" : "浅色"}。</span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          {THEME_OPTIONS.map((option) => {
+            const Icon = option.icon;
+            const selected = currentTheme === option.id;
+
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setTheme(option.id)}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition-all",
+                  selected
+                    ? "border-primary bg-primary/8 shadow-sm shadow-primary/10"
+                    : "border-border/60 bg-background/80 hover:border-primary/35 hover:bg-accent/20"
+                )}
+                disabled={!mounted}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={cn(
+                      "mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border",
+                      selected
+                        ? "border-primary/30 bg-primary/12 text-primary"
+                        : "border-border/60 bg-card text-muted-foreground"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">{option.label}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">{option.description}</div>
+                  </div>
+                </div>
+
+                <div
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors",
+                    selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
+                  )}
+                >
+                  {selected && <Check className="h-3 w-3" />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WhisperPanel({
+  open,
+  visible,
+  onClose,
+}: {
+  open: boolean;
+  visible: boolean;
+  onClose: () => void;
+}) {
   const [status, setStatus] = React.useState<WhisperStatus | null>(null);
   const [config, setConfig] = React.useState<WhisperConfig>({
     whisperPath: "",
@@ -77,13 +222,11 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
   const [loading, setLoading] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  // When true, auto-download model after whisper install completes
   const [pendingModelDownload, setPendingModelDownload] = React.useState(false);
 
   const downloadEsRef = React.useRef<EventSource | null>(null);
   const installEsRef = React.useRef<EventSource | null>(null);
 
-  // 加载状态和配置
   const loadData = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -112,14 +255,12 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
     }
   }, []);
 
-  // 对话框打开时加载数据
   React.useEffect(() => {
     if (open) {
       loadData();
     }
   }, [open, loadData]);
 
-  // 清理 EventSource
   React.useEffect(() => {
     return () => {
       downloadEsRef.current?.close();
@@ -127,7 +268,6 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
     };
   }, []);
 
-  // 监听下载进度
   const startDownloadTracking = React.useCallback(() => {
     downloadEsRef.current?.close();
 
@@ -161,7 +301,6 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
     };
   }, [loadData]);
 
-  // 监听安装进度
   const startInstallTracking = React.useCallback(() => {
     installEsRef.current?.close();
 
@@ -196,20 +335,13 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
     };
   }, [loadData]);
 
-  // When install completes and pendingModelDownload is true, trigger model download
   React.useEffect(() => {
-    if (
-      pendingModelDownload &&
-      !installing &&
-      installProgress?.status === "completed"
-    ) {
+    if (pendingModelDownload && !installing && installProgress?.status === "completed") {
       setPendingModelDownload(false);
-      handleDownloadModel();
+      void handleDownloadModel();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [installing, installProgress, pendingModelDownload]);
+  }, [installProgress, installing, pendingModelDownload]);
 
-  // 安装 whisper.cpp
   const handleInstallWhisper = async () => {
     setError(null);
     setInstalling(true);
@@ -236,7 +368,6 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
     }
   };
 
-  // 下载模型（纯模型下载）
   const handleDownloadModel = async () => {
     setError(null);
     setDownloading(true);
@@ -267,10 +398,8 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
     }
   };
 
-  // 下载按钮点击：如果 whisper 未安装，先安装再下载
   const handleDownload = async () => {
     if (!status?.whisperInstalled) {
-      // whisper not installed: install first, then auto-download model
       setPendingModelDownload(true);
       await handleInstallWhisper();
     } else {
@@ -278,7 +407,6 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
     }
   };
 
-  // 保存配置
   const handleSave = async () => {
     setSaving(true);
     setError(null);
@@ -296,7 +424,7 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
         throw new Error(data.error || "保存配置失败");
       }
 
-      onOpenChange(false);
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存配置失败");
     } finally {
@@ -304,7 +432,6 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
     }
   };
 
-  // 处理模型选择
   const handleModelSelect = (modelId: "small" | "medium") => {
     setSelectedModel(modelId);
     setConfig((prev) => ({
@@ -314,7 +441,6 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
     }));
   };
 
-  // 处理配置字段变更
   const handleConfigChange = (field: keyof WhisperConfig, value: string | number) => {
     setConfig((prev) => ({ ...prev, [field]: value }));
   };
@@ -322,7 +448,6 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
   const modelExists = status?.modelName === selectedModel && status?.modelInstalled;
   const isBusy = installing || downloading;
 
-  // Determine the download button label
   const getDownloadButtonContent = () => {
     if (installing) {
       return (
@@ -337,14 +462,6 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
         <>
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           下载中...
-        </>
-      );
-    }
-    if (!status?.whisperInstalled && !modelExists) {
-      return (
-        <>
-          <Download className="mr-2 h-4 w-4" />
-          安装 whisper.cpp 并下载模型
         </>
       );
     }
@@ -373,34 +490,37 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Whisper 设置</DialogTitle>
-          <DialogDescription>配置本地语音识别模型</DialogDescription>
-        </DialogHeader>
+    <section
+      aria-hidden={!visible}
+      className={cn("space-y-6", !visible && "hidden")}
+    >
+      <div className="space-y-1">
+        <h3 className="text-lg font-semibold">Whisper 设置</h3>
+        <p className="text-sm text-muted-foreground">
+          配置本地语音识别模型、安装 whisper.cpp 并管理转录参数。
+        </p>
+      </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="space-y-6 py-4">
-            {/* 错误提示 */}
-            {error && (
-              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
-              </div>
-            )}
+      {loading ? (
+        <div className="flex items-center justify-center rounded-2xl border border-border/60 bg-card/70 py-14">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {error && (
+            <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
 
-            {/* 状态概览 */}
-            <div className="rounded-lg border border-border/40 bg-card/50 p-4 space-y-3">
+          <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">whisper.cpp</span>
                 <div className="flex items-center gap-2">
                   <span
                     className={cn(
-                      "h-2 w-2 rounded-full",
+                      "h-2.5 w-2.5 rounded-full",
                       status?.whisperInstalled ? "bg-green-500" : "bg-red-500"
                     )}
                   />
@@ -409,17 +529,18 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
                   </span>
                 </div>
               </div>
+
               {!status?.whisperInstalled && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    需要安装 whisper.cpp 才能进行语音转录（需要 Git 和编译工具）
+                    需要先安装 whisper.cpp 才能进行语音转录（依赖 Git 与本地编译工具）。
                   </p>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={handleInstallWhisper}
                     disabled={isBusy}
-                    className="w-full"
+                    className="w-full sm:w-auto"
                   >
                     {installing ? (
                       <>
@@ -436,117 +557,112 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
                 </div>
               )}
 
-              {/* whisper.cpp 安装进度 */}
               {installing && installProgress && (
-                <div className="rounded-md bg-muted/50 px-3 py-2 space-y-1">
+                <div className="rounded-xl bg-muted/60 px-3 py-3">
                   <div className="flex items-center gap-2 text-xs">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     <span className="text-muted-foreground">{installProgress.step}</span>
                   </div>
                   {installProgress.status === "cloning" && (
-                    <div className="text-[10px] text-muted-foreground/60">
+                    <div className="mt-1 text-[10px] text-muted-foreground/70">
                       正在从 GitHub 克隆仓库...
                     </div>
                   )}
                   {installProgress.status === "compiling" && (
-                    <div className="text-[10px] text-muted-foreground/60">
-                      编译可能需要几分钟，请耐心等待
+                    <div className="mt-1 text-[10px] text-muted-foreground/70">
+                      编译可能需要几分钟，请耐心等待。
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="border-t border-border/40 pt-3">
+              <div className="border-t border-border/50 pt-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">模型文件</span>
                   <div className="flex items-center gap-2">
                     <span
                       className={cn(
-                        "h-2 w-2 rounded-full",
+                        "h-2.5 w-2.5 rounded-full",
                         status?.modelInstalled ? "bg-green-500" : "bg-red-500"
                       )}
                     />
                     <span className="text-sm text-muted-foreground">
-                      {status?.modelInstalled
-                        ? `已安装 (${status.modelSize})`
-                        : "未安装"}
+                      {status?.modelInstalled ? `已安装 (${status.modelSize})` : "未安装"}
                     </span>
                   </div>
                 </div>
                 {!status?.modelInstalled && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    请在下方选择并下载模型
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">请先在下方选择并下载模型。</p>
                 )}
               </div>
             </div>
+          </div>
 
-            {/* 模型选择 */}
-            <div className="space-y-3">
-              <label className="text-sm font-medium">选择模型</label>
+          <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-medium">选择模型</h4>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Small 更快，Medium 识别质量更高。
+                </p>
+              </div>
+
               <div className="grid gap-3">
                 {MODEL_OPTIONS.map((model) => (
-                  <div
+                  <button
                     key={model.id}
+                    type="button"
                     onClick={() => handleModelSelect(model.id)}
                     className={cn(
-                      "relative flex cursor-pointer items-center justify-between rounded-lg border p-4 transition-all hover:border-primary/50",
+                      "relative flex items-center justify-between rounded-2xl border p-4 text-left transition-all",
                       selectedModel === model.id
-                        ? "border-primary ring-2 ring-primary/20"
-                        : "border-border/40"
+                        ? "border-primary bg-primary/8 shadow-sm shadow-primary/10"
+                        : "border-border/60 bg-background/80 hover:border-primary/35 hover:bg-accent/20"
                     )}
                   >
                     <div className="flex items-start gap-3">
                       <div
                         className={cn(
-                          "mt-0.5 h-4 w-4 rounded-full border-2 flex items-center justify-center",
+                          "mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2",
                           selectedModel === model.id
-                            ? "border-primary bg-primary"
+                            ? "border-primary bg-primary text-primary-foreground"
                             : "border-muted-foreground/30"
                         )}
                       >
-                        {selectedModel === model.id && (
-                          <Check className="h-2.5 w-2.5 text-primary-foreground" />
-                        )}
+                        {selectedModel === model.id && <Check className="h-2.5 w-2.5" />}
                       </div>
                       <div>
                         <div className="font-medium">{model.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {model.description}
-                        </div>
+                        <div className="text-xs text-muted-foreground">{model.description}</div>
                       </div>
                     </div>
                     <div className="text-xs text-muted-foreground">{model.size}</div>
-                  </div>
+                  </button>
                 ))}
               </div>
 
-              {/* 下载按钮和进度 */}
-              <div className="pt-2 space-y-3">
-                {/* whisper 安装进度（在下载区域也显示） */}
+              <div className="space-y-3 pt-2">
                 {installing && pendingModelDownload && installProgress && (
-                  <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
+                  <div className="rounded-xl bg-blue-50 px-3 py-3 text-xs text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
                     <span>Step 1/2: </span>
                     {installProgress.step}
-                    <span className="block text-[10px] text-blue-500 dark:text-blue-400 mt-0.5">
-                      安装完成后将自动开始下载模型
+                    <span className="mt-1 block text-[10px] text-blue-500 dark:text-blue-400">
+                      安装完成后将自动开始下载模型。
                     </span>
                   </div>
                 )}
 
-                {/* 模型下载进度 */}
                 {downloading && downloadProgress ? (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">
-                        {pendingModelDownload || (!status?.whisperInstalled && installProgress?.status === "completed")
+                        {pendingModelDownload ||
+                        (!status?.whisperInstalled && installProgress?.status === "completed")
                           ? "Step 2/2: "
                           : ""}
                         正在下载 {downloadProgress.modelName} 模型...
                       </span>
-                      <span className="font-medium">
-                        {downloadProgress.percent?.toFixed(1)}%
-                      </span>
+                      <span className="font-medium">{downloadProgress.percent?.toFixed(1)}%</span>
                     </div>
                     <Progress value={downloadProgress.percent || 0} max={100} />
                     <div className="flex justify-between text-xs text-muted-foreground">
@@ -558,7 +674,7 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
                   <Button
                     onClick={handleDownload}
                     disabled={isBusy}
-                    className="w-full"
+                    className="w-full sm:w-auto"
                     variant={modelExists && status?.whisperInstalled ? "outline" : "default"}
                   >
                     {getDownloadButtonContent()}
@@ -566,12 +682,14 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
                 )}
               </div>
             </div>
+          </div>
 
-            {/* 高级设置 */}
+          <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
             <div className="space-y-3">
               <button
+                type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex w-full items-center justify-between rounded-lg border border-border/40 p-3 text-sm font-medium transition-colors hover:bg-accent/50"
+                className="flex w-full items-center justify-between rounded-2xl border border-border/60 bg-background/70 px-4 py-3 text-sm font-medium transition-colors hover:bg-accent/20"
               >
                 <div className="flex items-center gap-2">
                   <Settings className="h-4 w-4 text-muted-foreground" />
@@ -586,16 +704,16 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
               </button>
 
               {showAdvanced && (
-                <div className="space-y-4 rounded-lg border border-border/40 bg-card/30 p-4">
+                <div className="grid gap-4 rounded-2xl border border-border/60 bg-background/70 p-4">
                   <div className="space-y-2">
                     <label className="text-xs font-medium">转录文件目录</label>
                     <Input
                       value={config.outputDir}
                       onChange={(e) => handleConfigChange("outputDir", e.target.value)}
-                      placeholder="~/Documents/memo-flow-transcripts"
+                      placeholder="memo-flow/transcripts"
                     />
                     <p className="text-xs text-muted-foreground">
-                      转录完成后，文件将保存到此目录下（以播客标题命名的子文件夹）
+                      转录完成后，文件将保存到此目录下（以播客标题命名的子文件夹）。
                     </p>
                   </div>
 
@@ -604,7 +722,7 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
                     <Input
                       value={config.whisperPath}
                       onChange={(e) => handleConfigChange("whisperPath", e.target.value)}
-                      placeholder="/path/to/whisper.cpp"
+                      placeholder="memo-flow/whisper.cpp/build/bin/whisper-cli"
                     />
                   </div>
 
@@ -613,7 +731,7 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
                     <Input
                       value={config.modelPath}
                       onChange={(e) => handleConfigChange("modelPath", e.target.value)}
-                      placeholder="/path/to/model.bin"
+                      placeholder="memo-flow/models/ggml-small.bin"
                     />
                   </div>
 
@@ -624,39 +742,96 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
                       min={1}
                       max={16}
                       value={config.threads}
-                      onChange={(e) =>
-                        handleConfigChange("threads", parseInt(e.target.value) || 1)
-                      }
+                      onChange={(e) => handleConfigChange("threads", parseInt(e.target.value, 10) || 1)}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      建议设置为 CPU 核心数的一半
-                    </p>
+                    <p className="text-xs text-muted-foreground">建议设置为 CPU 核心数的一半。</p>
                   </div>
                 </div>
               )}
             </div>
           </div>
-        )}
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={saving || isBusy}
-          >
-            取消
-          </Button>
-          <Button onClick={handleSave} disabled={saving || loading}>
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                保存中...
-              </>
-            ) : (
-              "保存"
-            )}
-          </Button>
-        </DialogFooter>
+          <div className="flex flex-col-reverse gap-3 border-t border-border/60 pt-4 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={onClose} disabled={saving || isBusy}>
+              取消
+            </Button>
+            <Button onClick={handleSave} disabled={saving || loading}>
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  保存中...
+                </>
+              ) : (
+                "保存 Whisper 配置"
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
+  const [activeSection, setActiveSection] = React.useState<SettingsSection>("general");
+
+  React.useEffect(() => {
+    if (open) {
+      setActiveSection("general");
+    }
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-5xl gap-0 overflow-hidden p-0 sm:rounded-[1.5rem]">
+        <DialogHeader className="border-b border-border/60 px-6 py-5">
+          <DialogTitle>设置</DialogTitle>
+          <DialogDescription>管理应用偏好和本地语音转录环境。</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid max-h-[78vh] min-h-[560px] grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)]">
+          <aside className="border-b border-border/60 bg-muted/20 p-3 md:border-b-0 md:border-r">
+            <nav className="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
+              {SETTINGS_SECTIONS.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActiveSection(section.id)}
+                  className={cn(
+                    "flex min-w-[160px] items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-all md:min-w-0",
+                    activeSection === section.id
+                      ? "border-primary/30 bg-background shadow-sm shadow-primary/10"
+                      : "border-transparent text-muted-foreground hover:border-border/60 hover:bg-background/70 hover:text-foreground"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl",
+                      activeSection === section.id
+                        ? "bg-primary/12 text-primary"
+                        : "bg-background/80 text-muted-foreground"
+                    )}
+                  >
+                    {section.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{section.label}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{section.description}</div>
+                  </div>
+                </button>
+              ))}
+            </nav>
+          </aside>
+
+          <div className="min-h-0 overflow-y-auto bg-background px-4 py-5 sm:px-6 sm:py-6">
+            <GeneralSettingsPanel visible={activeSection === "general"} />
+            <WhisperPanel
+              open={open}
+              visible={activeSection === "whisper"}
+              onClose={() => onOpenChange(false)}
+            />
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

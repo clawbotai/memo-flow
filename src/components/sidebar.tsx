@@ -3,9 +3,8 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Home, Mic, FileSearch, Library, Settings, Info, Menu, X, Sun, Moon, History } from 'lucide-react';
-import { useTheme } from 'next-themes';
-import { useRouter, usePathname } from 'next/navigation';
+import { Home, Mic, FileSearch, Library, Settings, Info, Menu, X, History } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export type PageId = 'home' | 'podcast' | 'analyze' | 'knowledge' | 'history';
 
@@ -38,20 +37,10 @@ const mainMenuItems: MenuItem[] = [
 ];
 
 export function Sidebar({ activePage, onNavigate, onOpenSettings }: SidebarProps) {
-  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
   const router = useRouter();
 
   const bottomMenuItems: BottomMenuItem[] = [
-    {
-      id: 'theme',
-      label: mounted ? (theme === 'dark' ? '浅色模式' : '深色模式') : '主题设置',
-      icon: mounted && theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />,
-      onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark')
-    },
     { id: 'settings', label: '设置', icon: <Settings className="w-4 h-4" />, onClick: onOpenSettings },
     { id: 'about', label: '关于', icon: <Info className="w-4 h-4" />, onClick: () => {} },
   ];
