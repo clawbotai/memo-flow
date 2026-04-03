@@ -1,232 +1,185 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FlowLoader } from '@/components/ui/flow-loader';
-import { ToastManager } from '@/components/ui/toast';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Mic, History, FileSearch, Library } from 'lucide-react';
+import { TranscriptionRecord } from '@/types/transcription-history';
+import TranscriptionCard from '@/components/transcription-card';
 
 export default function Home() {
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [recentRecords, setRecentRecords] = useState<TranscriptionRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // 播客转录相关状态
-  const [podcastUrl, setPodcastUrl] = useState('');
-  const [podcastLoading, setPodcastLoading] = useState(false);
-  const [podcastTranscript, setPodcastTranscript] = useState('');
-  const [podcastAudioInfo, setPodcastAudioInfo] = useState<any>(null);
-
-  // 处理播客转录
-  const handlePodcastTranscribe = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!podcastUrl.trim()) return;
-
-    setPodcastLoading(true);
-    setPodcastTranscript('');
-    setPodcastAudioInfo(null);
-
-    try {
-      // 检查是否为小宇宙链接
-      if (!podcastUrl.includes('xiaoyuzhoufm.com')) {
-        setToast({ message: '目前仅支持小宇宙播客链接', type: 'error' });
-        setPodcastLoading(false);
-        return;
+  useEffect(() => {
+    const loadRecent = async () => {
+      try {
+        const response = await fetch('/api/transcription-history');
+        const result = await response.json();
+        if (result.success) {
+          const sorted = result.data
+            .sort((a: TranscriptionRecord, b: TranscriptionRecord) =>
+              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+            )
+            .slice(0, 3);
+          setRecentRecords(sorted);
+        }
+      } catch (error) {
+        console.error('获取最近转录失败:', error);
+      } finally {
+        setLoading(false);
       }
+    };
+    loadRecent();
+  }, []);
 
-      // 调用处理播客的API
-      const response = await fetch('/api/process-podcast', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url: podcastUrl }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setPodcastTranscript(result.data.transcript);
-        setPodcastAudioInfo({
-          audioUrl: result.data.audioUrl,
-          wordCount: result.data.wordCount,
-          language: result.data.language,
-        });
-        setToast({ message: '转录成功！', type: 'success' });
-      } else {
-        setToast({ message: result.error || '转录失败，请重试', type: 'error' });
-      }
-    } catch (error) {
-      console.error('Podcast transcription error:', error);
-      setToast({ message: '网络错误，请检查连接', type: 'error' });
-    } finally {
-      setPodcastLoading(false);
-    }
-  };
+  const features = [
+    {
+      icon: <Mic className="w-5 h-5" />,
+      title: '播客转录',
+      description: '粘贴小宇宙播客链接，自动转录为文字',
+      href: '/podcast',
+      available: true,
+    },
+    {
+      icon: <History className="w-5 h-5" />,
+      title: '转录历史',
+      description: '查看和管理所有转录记录',
+      href: '/transcriptions',
+      available: true,
+    },
+    {
+      icon: <FileSearch className="w-5 h-5" />,
+      title: '内容解析',
+      description: '智能分析播客内容，提取关键信息',
+      href: '#',
+      available: false,
+    },
+    {
+      icon: <Library className="w-5 h-5" />,
+      title: '知识库',
+      description: '整理和管理你的播客知识体系',
+      href: '#',
+      available: false,
+    },
+  ];
 
   return (
-    <main className="min-h-screen bg-background relative overflow-hidden">
-      {/* Flow Background Animation */}
-      <div className="absolute inset-0 opacity-5 pointer-events-none">
-        <div className="absolute top-0 -left-1/4 w-96 h-96 bg-primary rounded-full mix-blend-multiply filter blur-3xl animate-flow-bg" />
-        <div className="absolute top-0 -right-1/4 w-96 h-96 bg-primary-light rounded-full mix-blend-multiply filter blur-3xl animate-flow-bg" style={{ animationDelay: '1s' }} />
-        <div className="absolute -bottom-32 left-1/2 w-96 h-96 bg-secondary rounded-full mix-blend-multiply filter blur-3xl animate-flow-bg" style={{ animationDelay: '2s' }} />
+    <div className="min-h-full bg-background relative overflow-hidden">
+      {/* Organic Background Elements */}
+      <div className="absolute inset-0 opacity-20 pointer-events-none">
+        <div className="absolute top-10 left-10 w-32 h-32 rounded-full bg-primary/10 blur-xl rotate-12"></div>
+        <div className="absolute top-40 right-20 w-24 h-24 rounded-full bg-secondary/15 blur-lg -rotate-45"></div>
+        <div className="absolute bottom-40 left-1/4 w-40 h-40 rounded-full bg-primary/5 blur-2xl rotate-45"></div>
+        <div className="absolute bottom-20 right-1/3 w-28 h-28 rounded-full bg-primary-light/10 blur-xl rotate-30"></div>
+
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 800" preserveAspectRatio="none">
+          <path
+            d="M0,400 Q300,200 600,400 T1200,400"
+            stroke="currentColor"
+            strokeOpacity="0.05"
+            strokeWidth="150"
+            fill="none"
+            className="text-primary"
+          />
+          <path
+            d="M0,600 Q400,500 800,600 T1200,550"
+            stroke="currentColor"
+            strokeOpacity="0.05"
+            strokeWidth="100"
+            fill="none"
+            className="text-secondary"
+          />
+        </svg>
       </div>
 
-      <div className="container max-w-4xl mx-auto px-4 py-16 relative z-10">
-        <div className="text-center space-y-8">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-3">
-              <span className="text-5xl">🌊</span>
-              <h1 className="text-5xl font-bold bg-gradient-to-r from-primary via-primary-light to-primary bg-clip-text text-transparent animate-flow-bg">
-                MemoFlow
-              </h1>
-            </div>
-            <p className="text-2xl text-muted-foreground font-light">
-              播客转录工具
-            </p>
-            <p className="text-lg text-muted-foreground">
-              粘贴小宇宙播客链接，自动转录为文字
-            </p>
+      <div className="max-w-5xl mx-auto px-6 py-8 relative z-[1]">
+        <div className="space-y-8">
+          {/* 欢迎区域 */}
+          <div>
+            <h1 className="text-2xl font-semibold">欢迎使用 MemoFlow</h1>
+            <p className="text-muted-foreground mt-1">将播客内容转化为可检索、可管理的知识</p>
           </div>
 
-          {/* Toast 提示 */}
-          {toast && (
-            <ToastManager
-              message={toast.message}
-              type={toast.type}
-              onClose={() => setToast(null)}
-            />
-          )}
+          {/* 功能入口卡片 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {features.map((feature) => {
+              const content = (
+                <Card
+                  key={feature.title}
+                  className={`relative transition-all ${
+                    feature.available
+                      ? 'hover:shadow-md hover:border-primary/30 cursor-pointer'
+                      : 'opacity-60'
+                  }`}
+                >
+                  <CardContent className="flex items-start gap-4 p-5">
+                    <div className="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+                      {feature.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-sm">{feature.title}</h3>
+                        {!feature.available && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            即将推出
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{feature.description}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
 
-          {/* 播客转录功能卡 */}
-          <Card className="mb-8">
+              if (feature.available) {
+                return (
+                  <Link key={feature.title} href={feature.href} className="block">
+                    {content}
+                  </Link>
+                );
+              }
+              return <div key={feature.title}>{content}</div>;
+            })}
+          </div>
+
+          {/* 最近转录 */}
+          <Card>
             <CardHeader>
-              <CardTitle>播客转录</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>最近转录</CardTitle>
+                {recentRecords.length > 0 && (
+                  <Link href="/transcriptions" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    查看全部
+                  </Link>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handlePodcastTranscribe} className="space-y-4">
-                <div>
-                  <label htmlFor="podcast-url" className="block text-sm font-medium mb-2">
-                    小宇宙播客链接
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="podcast-url"
-                      type="text"
-                      placeholder="https://www.xiaoyuzhoufm.com/episode/..."
-                      value={podcastUrl}
-                      onChange={(e) => setPodcastUrl(e.target.value)}
-                      className="flex-1"
-                      disabled={podcastLoading}
-                    />
-                    <Button
-                      type="submit"
-                      className="bg-gradient-to-r from-primary to-primary-light hover:from-primary-dark hover:to-primary transition-all"
-                      disabled={podcastLoading || !podcastUrl.trim()}
-                    >
-                      {podcastLoading ? (
-                        <span className="flex items-center gap-2">
-                          <FlowLoader size="sm" />
-                          转录中...
-                        </span>
-                      ) : (
-                        <span>开始转录</span>
-                      )}
-                    </Button>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    输入小宇宙播客链接，自动提取音频并转录为文字
-                  </p>
+              {loading ? (
+                <div className="flex justify-center items-center h-24">
+                  <FlowLoader size="md" />
                 </div>
-              </form>
-
-              {/* 播客转录结果展示 */}
-              {(podcastTranscript || podcastAudioInfo) && (
-                <div className="mt-6 space-y-6">
-                  {podcastAudioInfo && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center justify-between">
-                          <span>音频信息</span>
-                          <div className="flex gap-2">
-                            <Badge variant="secondary">{podcastAudioInfo.language}</Badge>
-                            <Badge variant="outline">{podcastAudioInfo.wordCount} 字</Badge>
-                          </div>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-3">
-                            <span className="text-2xl">🎵</span>
-                            <div className="flex-1 min-w-0">
-                              <p className="truncate text-sm text-muted-foreground break-all">{podcastAudioInfo.audioUrl}</p>
-                            </div>
-                          </div>
-
-                          <Separator />
-
-                          <div className="bg-muted p-4 rounded-lg">
-                            <audio controls className="w-full">
-                              <source src={podcastAudioInfo.audioUrl} type="audio/mpeg" />
-                              您的浏览器不支持音频元素。
-                            </audio>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {podcastTranscript && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center justify-between">
-                          <span>转录内容</span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              navigator.clipboard.writeText(podcastTranscript);
-                              setToast({ message: '已复制到剪贴板', type: 'success' });
-                            }}
-                          >
-                            复制全文
-                          </Button>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Tabs defaultValue="plain" className="w-full">
-                          <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="plain">纯文本</TabsTrigger>
-                            <TabsTrigger value="formatted">格式化</TabsTrigger>
-                          </TabsList>
-                          <TabsContent value="plain" className="mt-4">
-                            <div className="bg-muted p-4 rounded-lg whitespace-pre-wrap leading-relaxed">
-                              {podcastTranscript}
-                            </div>
-                          </TabsContent>
-                          <TabsContent value="formatted" className="mt-4">
-                            <div className="prose prose-gray max-w-none">
-                              <div className="bg-white p-6 rounded-lg border">
-                                {podcastTranscript.split('\n\n').map((paragraph, index) => (
-                                  <p key={index} className="mb-4 last:mb-0">{paragraph}</p>
-                                ))}
-                              </div>
-                            </div>
-                          </TabsContent>
-                        </Tabs>
-                      </CardContent>
-                    </Card>
-                  )}
+              ) : recentRecords.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {recentRecords.map((record) => (
+                    <TranscriptionCard key={record.id} record={record} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">还没有转录记录</p>
+                  <Link href="/podcast" className="text-sm text-primary hover:underline mt-2 inline-block">
+                    开始第一次转录
+                  </Link>
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

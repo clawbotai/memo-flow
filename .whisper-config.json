@@ -1,0 +1,7 @@
+{
+  "whisperPath": "/Users/mondoi/Documents/memo-flow/whisper.cpp/build/bin/whisper-cli",
+  "modelPath": "/Users/mondoi/Documents/memo-flow/models/ggml-small.bin",
+  "modelName": "small",
+  "threads": 4,
+  "outputDir": "/Users/mondoi/Documents/memo-flow/transcripts"
+}

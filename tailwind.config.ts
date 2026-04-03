@@ -64,11 +64,22 @@ const config: Config = {
           "0%": { transform: "translateY(10px)", opacity: "0" },
           "100%": { transform: "translateY(0)", opacity: "1" },
         },
+        "flow-bg": {
+          "0%, 100%": { transform: "translate(0, 0) scale(1)" },
+          "33%": { transform: "translate(30px, -20px) scale(1.05)" },
+          "66%": { transform: "translate(-20px, 20px) scale(0.95)" },
+        },
+        "flow-bounce": {
+          "0%, 100%": { transform: "scaleY(0.6)", opacity: "0.4" },
+          "50%": { transform: "scaleY(1)", opacity: "1" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.3s ease-out",
         "slide-up": "slide-up 0.4s ease-out",
         "slide-up-fade": "slide-up-fade 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
+        "flow-bg": "flow-bg 8s ease-in-out infinite",
+        "flow-bounce": "flow-bounce 1.2s ease-in-out infinite",
       },
     },
   },

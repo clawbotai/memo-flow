@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Lora } from "next/font/google";
 import "@/styles/globals.css";
 import { cn } from "@/lib/utils";
-import Link from 'next/link';
+import { AppShell } from "@/components/app-shell";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const inter = Inter({ subsets: ["latin"] });
+const lora = Lora({ subsets: ["latin"], weight: ['400', '500', '600', '700'] });
 
 export const metadata: Metadata = {
   title: "MemoFlow - 播客转录工具",
@@ -20,37 +22,29 @@ export default function RootLayout({
     <html lang="zh-CN" suppressHydrationWarning>
       <body
         className={cn(
-          "min-h-screen bg-background font-sans antialiased text-foreground",
-          inter.className
+          "min-h-screen bg-background font-serif antialiased text-foreground relative overflow-hidden",
+          lora.className
         )}
       >
-        <div className="min-h-screen flex flex-col">
-          {/* Navigation Bar */}
-          <nav className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
-            <div className="container mx-auto px-4">
-              <div className="flex items-center h-16">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">🌊</span>
-                  <Link href="/" className="text-xl font-bold bg-gradient-to-r from-primary to-primary-light bg-clip-text text-transparent">
-                    MemoFlow
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </nav>
+        {/* Organic background elements */}
+        <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+          {/* Soft organic shapes */}
+          <div className="absolute top-1/4 left-1/4 w-64 h-64 rounded-full bg-primary/5 blur-3xl"></div>
+          <div className="absolute bottom-1/3 right-1/3 w-72 h-72 rounded-full bg-secondary/5 blur-3xl"></div>
 
-          {/* Main Content */}
-          <main className="flex-1">
-            {children}
-          </main>
-
-          {/* Footer */}
-          <footer className="border-t py-8">
-            <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-              <p>&copy; {new Date().getFullYear()} MemoFlow - 播客转录工具</p>
-            </div>
-          </footer>
+          {/* Subtle leaf-like patterns */}
+          <div className="absolute top-1/3 right-1/4 w-16 h-16 rotate-45 rounded-full bg-primary/10 blur-xl"></div>
+          <div className="absolute bottom-1/4 left-1/3 w-12 h-12 -rotate-12 rounded-full bg-secondary/10 blur-xl"></div>
         </div>
+
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <AppShell>{children}</AppShell>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -7,7 +7,7 @@ import fs from 'fs';
 
 // whisper.cpp 可执行文件路径
 const WHISPER_PATH = process.env.WHISPER_PATH ||
-  path.join(process.cwd(), 'whisper.cpp/main');
+  path.join(process.cwd(), 'whisper.cpp/build/bin/whisper-cli');
 
 // 模型文件路径
 export const MODEL_PATH = process.env.WHISPER_MODEL_PATH ||

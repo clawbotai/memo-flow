@@ -24,7 +24,7 @@ export function FlowLoader({ className, size = 'md' }: FlowLoaderProps) {
     <div className={cn('flex items-center justify-center gap-1', className)}>
       <div
         className={cn(
-          'rounded-full bg-primary animate-flow-bounce',
+          'rounded-full bg-gradient-to-b from-primary to-primary-light animate-flow-bounce',
           barSizes[size]
         )}
         style={{
@@ -34,7 +34,7 @@ export function FlowLoader({ className, size = 'md' }: FlowLoaderProps) {
       />
       <div
         className={cn(
-          'rounded-full bg-primary animate-flow-bounce',
+          'rounded-full bg-gradient-to-b from-primary to-primary-light animate-flow-bounce',
           barSizes[size]
         )}
         style={{
@@ -44,7 +44,7 @@ export function FlowLoader({ className, size = 'md' }: FlowLoaderProps) {
       />
       <div
         className={cn(
-          'rounded-full bg-primary animate-flow-bounce',
+          'rounded-full bg-gradient-to-b from-primary to-primary-light animate-flow-bounce',
           barSizes[size]
         )}
         style={{
