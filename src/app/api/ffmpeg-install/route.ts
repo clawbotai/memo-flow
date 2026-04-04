@@ -3,7 +3,7 @@ import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
-import { getWhisperConfig, resolveWhisperConfigPaths, isValidFfmpegExecutable, resolveConfigPath } from '@/lib/whisper-config';
+import { getWhisperConfig, saveWhisperConfig, resolveWhisperConfigPaths, isValidFfmpegExecutable, resolveConfigPath, toProjectDisplayPath } from '@/lib/whisper-config';
 
 const execAsync = promisify(exec);
 
@@ -48,6 +48,20 @@ function resolveUsableFfmpegPath(configFfmpegPath: string): string | null {
   return null;
 }
 
+function persistUsableFfmpegPath(configFfmpegPath: string, usableFfmpegPath: string): string {
+  const config = getWhisperConfig();
+  const displayPath = toProjectDisplayPath(usableFfmpegPath);
+
+  if (resolveConfigPath(configFfmpegPath) !== usableFfmpegPath || config.ffmpegPath !== displayPath) {
+    saveWhisperConfig({
+      ...config,
+      ffmpegPath: displayPath,
+    });
+  }
+
+  return displayPath;
+}
+
 async function canRunFfmpeg(env: NodeJS.ProcessEnv, ffmpegPath: string): Promise<boolean> {
   if (!ffmpegPath) return false;
   const escapedPath = ffmpegPath.replaceAll('"', '\\"');
@@ -79,6 +93,10 @@ async function installFfmpegInBackground(): Promise<void> {
     const pathFfmpegIsUsable = await canRunFfmpeg(env, 'ffmpeg');
 
     if (configuredFfmpegIsUsable || pathFfmpegIsUsable) {
+      const usablePath = configuredFfmpegIsUsable
+        ? resolveConfigPath(config.ffmpegPath)
+        : resolveConfigPath('ffmpeg');
+      persistUsableFfmpegPath(config.ffmpegPath, usablePath);
       writeProgress({ status: 'completed', step: 'ffmpeg 已经安装，无需重复安装。' });
       return;
     }
@@ -142,8 +160,10 @@ async function installFfmpegInBackground(): Promise<void> {
     const latestResolvedConfig = resolveWhisperConfigPaths(latestConfig);
     
     if (isValidFfmpegExecutable(latestResolvedConfig.ffmpegPath) && await canRunFfmpeg(env, latestResolvedConfig.ffmpegPath)) {
+      persistUsableFfmpegPath(latestConfig.ffmpegPath, resolveConfigPath(latestConfig.ffmpegPath));
       writeProgress({ status: 'completed', step: 'ffmpeg 安装成功！' });
     } else if (await canRunFfmpeg(env, 'ffmpeg')) {
+      persistUsableFfmpegPath(latestConfig.ffmpegPath, resolveConfigPath('ffmpeg'));
       writeProgress({ status: 'completed', step: 'ffmpeg 安装成功！' });
     } else {
       writeProgress({
@@ -169,11 +189,12 @@ export async function POST() {
   // 如果已经安装，直接返回
   const usableFfmpegPath = resolveUsableFfmpegPath(config.ffmpegPath);
   if (usableFfmpegPath) {
+    const displayPath = persistUsableFfmpegPath(config.ffmpegPath, usableFfmpegPath);
     return NextResponse.json({
       success: true,
       alreadyInstalled: true,
       message: 'ffmpeg 已经安装',
-      ffmpegPath: usableFfmpegPath,
+      ffmpegPath: displayPath,
     });
   }
 

@@ -20,11 +20,11 @@
 
 ## 更新摘要
 **所做更改**
-- 新增集中式配置管理系统，包括环境变量合并、验证和持久化功能
-- 增强配置验证逻辑，支持字段类型检查和模型名称验证
-- 完善状态监控功能，包括安装状态和模型状态检查
-- 新增 whisper.cpp 安装和下载进度跟踪机制
-- 扩展配置文件管理，支持输出目录和线程数配置
+- 新增动态路径解析系统，支持绝对路径、相对路径和命令路径解析
+- 增强向后兼容性支持，自动适配旧版配置路径格式
+- 完善验证机制，包括可执行文件权限检查和格式验证
+- 扩展配置文件管理，支持多种路径解析策略和显示路径转换
+- 增强错误处理和日志记录，提供详细的诊断信息
 
 ## 目录
 1. [简介](#简介)
@@ -175,14 +175,22 @@ ProgressAPI-->>UI : 推送下载进度事件
 ## 详细组件分析
 
 ### 配置管理模块（src/lib/whisper-config.ts）
+
+**重大增强功能**：
+- **动态路径解析**：支持绝对路径、相对路径和命令路径解析
+- **向后兼容性**：自动适配旧版配置路径格式
+- **全面验证机制**：可执行文件权限检查和格式验证
+- **智能路径转换**：显示路径与实际路径的双向转换
+
+**核心功能**：
 - 配置文件路径：位于项目根目录的 .whisper-config.json
-- 默认配置：包含 whisperPath、modelPath、modelName、threads、outputDir
-- 环境变量覆盖：WHISPER_PATH、WHISPER_MODEL_PATH、WHISPER_THREADS、OUTPUT_DIR
-- 功能：
-  - 读取配置：若配置文件存在则合并默认值，否则返回默认值（含环境变量覆盖）
-  - 保存配置：写入配置文件，返回合并后的配置
-  - 推断模型名：根据模型文件名关键字推断模型类型
-  - 文件大小格式化：将字节转换为可读字符串
+- 默认配置：包含 whisperPath、modelPath、modelName、threads、outputDir、ffmpegPath
+- 环境变量覆盖：WHISPER_PATH、WHISPER_MODEL_PATH、WHISPER_THREADS、OUTPUT_DIR、FFMPEG_PATH
+- 路径解析策略：
+  - 绝对路径：直接使用
+  - 相对路径：相对于项目根目录解析
+  - 命令路径：通过 command -v 查找可执行文件
+  - 项目名前缀：向后兼容旧版路径格式
 
 ```mermaid
 flowchart TD
@@ -191,15 +199,17 @@ CheckFile --> |存在| ReadFile["读取并解析 JSON"]
 CheckFile --> |不存在| UseDefault["使用默认配置"]
 ReadFile --> Merge["合并默认配置与保存配置"]
 UseDefault --> Merge
-Merge --> EnvOverride["应用环境变量覆盖"]
-EnvOverride --> Return["返回配置"]
+Merge --> ResolvePaths["解析路径动态解析"]
+ResolvePaths --> EnvOverride["应用环境变量覆盖"]
+EnvOverride --> Validate["验证可执行文件"]
+Validate --> Return["返回配置"]
 ```
 
 **图表来源**
 - [src/lib/whisper-config.ts:57-74](file://src/lib/whisper-config.ts#L57-L74)
 
 **章节来源**
-- [src/lib/whisper-config.ts:1-108](file://src/lib/whisper-config.ts#L1-L108)
+- [src/lib/whisper-config.ts:1-432](file://src/lib/whisper-config.ts#L1-L432)
 
 ### 转写封装模块（src/lib/whisper.ts）
 - 负责调用 whisper.cpp 可执行文件进行转写
@@ -231,7 +241,7 @@ Whisper-->>Caller : 返回结果并清理临时文件
 - [src/lib/whisper.ts:54-156](file://src/lib/whisper.ts#L54-L156)
 
 **章节来源**
-- [src/lib/whisper.ts:1-229](file://src/lib/whisper.ts#L1-L229)
+- [src/lib/whisper.ts:1-261](file://src/lib/whisper.ts#L1-L261)
 
 ### 配置 API（src/app/api/whisper-config/route.ts）
 - GET /api/whisper-config：返回合并后的配置（含环境变量覆盖）
@@ -258,8 +268,8 @@ API-->>Client : JSON 响应
 - [src/lib/whisper-config.ts:57-92](file://src/lib/whisper-config.ts#L57-L92)
 
 **章节来源**
-- [src/app/api/whisper-config/route.ts:1-125](file://src/app/api/whisper-config/route.ts#L1-L125)
-- [src/lib/whisper-config.ts:1-108](file://src/lib/whisper-config.ts#L1-L108)
+- [src/app/api/whisper-config/route.ts:1-127](file://src/app/api/whisper-config/route.ts#L1-L127)
+- [src/lib/whisper-config.ts:1-432](file://src/lib/whisper-config.ts#L1-L432)
 
 ### 状态 API（src/app/api/whisper-status/route.ts）
 - GET /api/whisper-status：返回 whisper.cpp 与模型的安装状态、模型大小与模型名推断
@@ -280,8 +290,8 @@ BuildStatus --> Return["返回 JSON"]
 - [src/lib/whisper-config.ts:99-107](file://src/lib/whisper-config.ts#L99-L107)
 
 **章节来源**
-- [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
-- [src/lib/whisper-config.ts:1-108](file://src/lib/whisper-config.ts#L1-L108)
+- [src/app/api/whisper-status/route.ts:1-66](file://src/app/api/whisper-status/route.ts#L1-L66)
+- [src/lib/whisper-config.ts:1-432](file://src/lib/whisper-config.ts#L1-L432)
 
 ### 模型下载与进度（src/app/api/whisper-download/route.ts、src/app/api/whisper-download-progress/route.ts）
 - 下载接口：
@@ -319,8 +329,8 @@ PROG-->>UI : 推送状态/进度/完成/错误
 - [src/app/api/whisper-download-progress/route.ts:45-140](file://src/app/api/whisper-download-progress/route.ts#L45-L140)
 
 **章节来源**
-- [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
-- [src/app/api/whisper-download-progress/route.ts:1-141](file://src/app/api/whisper-download-progress/route.ts#L1-L141)
+- [src/app/api/whisper-download/route.ts:1-200](file://src/app/api/whisper-download/route.ts#L1-L200)
+- [src/app/api/whisper-download-progress/route.ts:1-137](file://src/app/api/whisper-download-progress/route.ts#L1-L137)
 
 ### whisper.cpp 安装与进度（src/app/api/whisper-install/route.ts、src/app/api/whisper-install-progress/route.ts）
 - 安装接口：
@@ -357,7 +367,7 @@ PROG-->>UI : 推送状态/步骤/完成/错误
 - [src/app/api/whisper-install-progress/route.ts:23-100](file://src/app/api/whisper-install-progress/route.ts#L23-L100)
 
 **章节来源**
-- [src/app/api/whisper-install/route.ts:1-143](file://src/app/api/whisper-install/route.ts#L1-L143)
+- [src/app/api/whisper-install/route.ts:1-200](file://src/app/api/whisper-install/route.ts#L1-L200)
 - [src/app/api/whisper-install-progress/route.ts:1-101](file://src/app/api/whisper-install-progress/route.ts#L1-L101)
 
 ### 设置对话框（src/components/whisper-settings.tsx）
@@ -396,7 +406,7 @@ Save --> Done["关闭对话框"]
 - [src/components/whisper-settings.tsx:164-197](file://src/components/whisper-settings.tsx#L164-L197)
 
 **章节来源**
-- [src/components/whisper-settings.tsx:1-664](file://src/components/whisper-settings.tsx#L1-L664)
+- [src/components/whisper-settings.tsx:1-996](file://src/components/whisper-settings.tsx#L1-L996)
 
 ## 依赖关系分析
 - 类型定义：WhisperConfig、WhisperStatus、ApiResponse
@@ -422,15 +432,15 @@ InstallAPI --> ConfigLib
 ```
 
 **图表来源**
-- [src/types/index.ts:1-43](file://src/types/index.ts#L1-L43)
-- [src/app/api/whisper-config/route.ts:1-125](file://src/app/api/whisper-config/route.ts#L1-L125)
-- [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
-- [src/components/whisper-settings.tsx:1-664](file://src/components/whisper-settings.tsx#L1-L664)
-- [src/lib/whisper-config.ts:1-108](file://src/lib/whisper-config.ts#L1-L108)
-- [src/lib/whisper.ts:1-229](file://src/lib/whisper.ts#L1-L229)
+- [src/types/index.ts:1-46](file://src/types/index.ts#L1-L46)
+- [src/app/api/whisper-config/route.ts:1-127](file://src/app/api/whisper-config/route.ts#L1-L127)
+- [src/app/api/whisper-status/route.ts:1-66](file://src/app/api/whisper-status/route.ts#L1-L66)
+- [src/components/whisper-settings.tsx:1-996](file://src/components/whisper-settings.tsx#L1-L996)
+- [src/lib/whisper-config.ts:1-432](file://src/lib/whisper-config.ts#L1-L432)
+- [src/lib/whisper.ts:1-261](file://src/lib/whisper.ts#L1-L261)
 
 **章节来源**
-- [src/types/index.ts:1-43](file://src/types/index.ts#L1-L43)
+- [src/types/index.ts:1-46](file://src/types/index.ts#L1-L46)
 - [package.json:1-37](file://package.json#L1-L37)
 
 ## 性能考虑
@@ -474,4 +484,12 @@ InstallAPI --> ConfigLib
 - [src/lib/whisper.ts:103-108](file://src/lib/whisper.ts#L103-L108)
 
 ## 结论
-本 Whisper 配置管理系统提供了完善的本地语音识别模型配置、下载与状态管理能力。通过 API 路由与前端对话框的配合，用户可以便捷地完成模型选择、下载与配置保存；底层封装保证了转写流程的稳定性与可维护性。新增的集中式配置管理系统支持环境变量合并、验证和持久化功能，增强了系统的灵活性和可靠性。建议在生产环境中结合实际硬件条件调整线程数与模型大小，并完善日志与监控以便快速定位问题。
+本 Whisper 配置管理系统提供了完善的本地语音识别模型配置、下载与状态管理能力。通过 API 路由与前端对话框的配合，用户可以便捷地完成模型选择、下载与配置保存；底层封装保证了转写流程的稳定性与可维护性。
+
+**重大增强特性**：
+- **动态路径解析系统**：支持绝对路径、相对路径和命令路径解析，提高了配置的灵活性
+- **向后兼容性支持**：自动适配旧版配置路径格式，确保升级过程的平滑过渡
+- **全面验证机制**：包括可执行文件权限检查、格式验证和功能测试，增强了系统的可靠性
+- **智能路径转换**：显示路径与实际路径的双向转换，改善了用户体验
+
+建议在生产环境中结合实际硬件条件调整线程数与模型大小，并完善日志与监控以便快速定位问题。新的配置管理系统显著提升了在不同环境中的可靠性，为用户提供了更加稳定和易用的体验。

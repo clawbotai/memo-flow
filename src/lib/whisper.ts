@@ -4,7 +4,7 @@
 import { execFile } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import { isValidWhisperExecutable, getWhisperConfig, resolveWhisperConfigPaths } from './whisper-config';
+import { getWhisperExecutionOptions, isValidWhisperExecutable, getWhisperConfig, resolveWhisperConfigPaths } from './whisper-config';
 
 /**
  * 获取当前的 Whisper 配置
@@ -112,7 +112,7 @@ export async function transcribe(
 
   return new Promise((resolve, reject) => {
     // 运行命令
-    execFile(config.whisperPath, args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(config.whisperPath, args, { maxBuffer: 10 * 1024 * 1024, ...getWhisperExecutionOptions(config.whisperPath) }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(`whisper 执行失败：${error.message}\n${stderr}`));
         return;

@@ -4,5 +4,5 @@
   "modelName": "small",
   "threads": 4,
   "outputDir": "transcripts",
-  "ffmpegPath": "/Users/mondo/Downloads/ffmpeg-8.1/ffmpeg"
+  "ffmpegPath": "ffmpeg"
 }

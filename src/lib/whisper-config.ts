@@ -3,7 +3,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { WhisperConfig } from '@/types';
 
 // 配置文件路径
@@ -47,6 +47,12 @@ function resolveCommandPath(commandName: string): string | null {
   }
 }
 
+function getExtendedPathEnv(): string {
+  return [process.env.PATH, '/usr/local/bin', '/opt/homebrew/bin', '/opt/homebrew/sbin']
+    .filter(Boolean)
+    .join(':');
+}
+
 export function resolveConfigPath(inputPath: string): string {
   if (!inputPath) return inputPath;
   if (path.isAbsolute(inputPath)) return inputPath;
@@ -87,18 +93,7 @@ export function toProjectDisplayPath(inputPath: string): string {
 }
 
 function hasUsableWhisperExecutable(whisperPath: string): boolean {
-  if (!whisperPath) return false;
-  const resolvedPath = resolveConfigPath(whisperPath);
-
-  if (isBareCommandPath(whisperPath)) {
-    return resolvedPath !== whisperPath;
-  }
-
-  try {
-    return fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile();
-  } catch {
-    return false;
-  }
+  return isValidWhisperExecutable(whisperPath);
 }
 
 export function isValidFfmpegExecutable(ffmpegPath: string): boolean {
@@ -132,110 +127,49 @@ export function isValidWhisperExecutable(whisperPath: string): boolean {
       return false;
     }
 
-    if (!fs.existsSync(whisperPath)) {
-      console.log(`文件不存在: ${whisperPath}`);
+    const resolvedPath = resolveConfigPath(whisperPath);
 
-      const basename = path.basename(whisperPath);
-      if ((basename === 'whisper' || basename === 'main' || basename === 'whisper-cli') && 
-          !whisperPath.includes('whisper.cpp') && 
-          !whisperPath.includes('build')) {
-        console.warn(`⚠️ 检测到不完整的路径 "${whisperPath}"，预期的二进制文件通常在 "whisper.cpp/build/bin/" 目录下`);
-      }
-
+    if (!fs.existsSync(resolvedPath)) {
+      console.log(`文件不存在: ${resolvedPath}`);
       return false;
     }
 
     // 检查文件是否可执行
-    const stats = fs.statSync(whisperPath);
+    const stats = fs.statSync(resolvedPath);
     if (!stats.isFile()) {
-      console.log(`不是文件: ${whisperPath}`);
+      console.log(`不是文件: ${resolvedPath}`);
       return false;
     }
 
     // 确保文件具有可执行权限
     if (!(stats.mode & 0o111)) {
-      console.log(`文件不可执行: ${whisperPath}`);
+      console.log(`文件不可执行: ${resolvedPath}`);
       try {
         // 尝试设置执行权限
-        fs.chmodSync(whisperPath, 0o755);
-        console.log(`已设置执行权限: ${whisperPath}`);
+        fs.chmodSync(resolvedPath, 0o755);
+        console.log(`已设置执行权限: ${resolvedPath}`);
       } catch (chmodErr) {
         console.error(`设置执行权限失败:`, chmodErr);
         return false;
       }
     }
 
-    console.log(`正在验证可执行文件: ${whisperPath}, 文件大小: ${stats.size} bytes (${Math.round(stats.size / 1024)} KB)`);
+    console.log(`正在验证可执行文件: ${resolvedPath}, 文件大小: ${stats.size} bytes (${Math.round(stats.size / 1024)} KB)`);
 
-    // 首先进行基本的功能测试
     try {
-      const extendedPath = [process.env.PATH, '/usr/local/bin', '/opt/homebrew/bin', '/opt/homebrew/sbin']
-        .filter(Boolean)
-        .join(':');
-
-      execSync(`"${whisperPath}" -h`, {
-        timeout: 25000, // 25秒超时，提供更多时间加载依赖
-        stdio: ['ignore', 'pipe', 'pipe'], // 捕获输出和错误
-        env: {
-          ...process.env,
-          PATH: extendedPath
-        }
+      execFileSync(resolvedPath, ['-h'], {
+        timeout: 25000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        ...getWhisperExecutionOptions(resolvedPath),
       });
-
-      console.log(`命令执行成功，退出码: 0`);
+      console.log('命令执行成功，退出码: 0');
       return true;
-    } catch {
-      // 功能测试失败，但我们再做一次更宽松的检查
-      console.warn(`功能测试失败，进行备用验证...`);
-
-      // 检查文件头部来确认是有效的可执行文件格式
-      let fd: number | undefined;
-      try {
-        fd = fs.openSync(whisperPath, 'r');
-        const buffer = Buffer.alloc(16);
-        fs.readSync(fd, buffer, 0, 16, 0);
-        fs.closeSync(fd);
-        fd = undefined; // 标记已关闭
-
-        let isValidFormat = false;
-
-        // 检查各种可执行文件格式
-        if (process.platform === 'darwin') {
-          // Mach-O formats (little-endian storage)
-          const magic = buffer.readUInt32LE(0);
-          isValidFormat = magic === 0xFEEDFACF || // MH_MAGIC_64 (64-bit)
-                         magic === 0xFEEDFACE;     // MH_MAGIC (32-bit)
-          // FAT binary uses big-endian: 0xCAFEBABE
-          if (!isValidFormat) {
-            const magicBE = buffer.readUInt32BE(0);
-            isValidFormat = magicBE === 0xCAFEBABE; // FAT_MAGIC
-          }
-        } else if (process.platform === 'linux') {
-          // ELF format
-          isValidFormat = buffer[0] === 0x7F && buffer[1] === 0x45 && buffer[2] === 0x4C && buffer[3] === 0x46;
-        } else {
-          // 通用检查
-          const magicLE = buffer.readUInt32LE(0);
-          isValidFormat = (buffer[0] === 0x7F && buffer[1] === 0x45 && buffer[2] === 0x4C && buffer[3] === 0x46) || // ELF
-                         (buffer[0] === 0x4D && buffer[1] === 0x5A) || // PE ("MZ")
-                         magicLE === 0xFEEDFACF || magicLE === 0xFEEDFACE; // Mach-O
-        }
-
-        if (isValidFormat) {
-          console.log('虽然功能测试失败，但检测到有效的可执行文件格式，假定为有效');
-          return true;
-        } else {
-          console.log('文件格式也不是有效的可执行格式');
-          return false;
-        }
-      } catch (formatError) {
-        // 确保文件描述符被关闭
-        if (fd !== undefined) {
-          try { fs.closeSync(fd); } catch { /* ignore */ }
-        }
-        console.error('格式检查失败:', formatError);
-        return false;
+    } catch (error) {
+      console.warn('功能测试失败，判定为不可用');
+      if (error instanceof Error) {
+        console.warn(error.message);
       }
+      return false;
     }
   } catch (error) {
     console.error('验证 whisper 可执行文件失败:', error);
@@ -244,6 +178,41 @@ export function isValidWhisperExecutable(whisperPath: string): boolean {
     }
     return false;
   }
+}
+
+export function getWhisperExecutionOptions(whisperPath: string): { env: NodeJS.ProcessEnv } {
+  const resolvedPath = resolveConfigPath(whisperPath);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: getExtendedPathEnv(),
+  };
+
+  if (!path.isAbsolute(resolvedPath)) {
+    return { env };
+  }
+
+  const buildDir = path.resolve(path.dirname(resolvedPath), '..');
+  const dylibDirs = [
+    path.join(buildDir, 'src'),
+    path.join(buildDir, 'ggml', 'src'),
+    path.join(buildDir, 'ggml', 'src', 'ggml-blas'),
+    path.join(buildDir, 'ggml', 'src', 'ggml-metal'),
+  ].filter((dir) => fs.existsSync(dir));
+
+  if (dylibDirs.length > 0) {
+    const joinedDirs = dylibDirs.join(':');
+    env.DYLD_LIBRARY_PATH = env.DYLD_LIBRARY_PATH
+      ? `${joinedDirs}:${env.DYLD_LIBRARY_PATH}`
+      : joinedDirs;
+    env.DYLD_FALLBACK_LIBRARY_PATH = env.DYLD_FALLBACK_LIBRARY_PATH
+      ? `${joinedDirs}:${env.DYLD_FALLBACK_LIBRARY_PATH}`
+      : joinedDirs;
+    env.LD_LIBRARY_PATH = env.LD_LIBRARY_PATH
+      ? `${joinedDirs}:${env.LD_LIBRARY_PATH}`
+      : joinedDirs;
+  }
+
+  return { env };
 }
 
 function getDefaultOutputDir(): string {
@@ -366,12 +335,9 @@ export function getWhisperConfig(): WhisperConfig {
 
       // 验证 whisperPath 是否有效
       if (mergedConfig.whisperPath) {
-        const hasKeyword = mergedConfig.whisperPath.includes('whisper-cli')
-          || mergedConfig.whisperPath.includes('main')
-          || mergedConfig.whisperPath.includes('whisper');
         const isUsable = hasUsableWhisperExecutable(mergedConfig.whisperPath);
 
-        if (!hasKeyword || !isUsable) {
+        if (!isUsable) {
           console.warn(`⚠️ 配置文件中的 whisperPath 无效或不存在: "${mergedConfig.whisperPath}"，将尝试使用默认路径`);
           mergedConfig.whisperPath = defaultConfig.whisperPath;
         }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getWhisperConfig, resolveWhisperConfigPaths } from '@/lib/whisper-config';
+import { getWhisperConfig, getWhisperExecutionOptions, isValidWhisperExecutable, resolveWhisperConfigPaths } from '@/lib/whisper-config';
 import { existsSync } from 'fs';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
@@ -44,7 +44,6 @@ async function convertToWav(inputPath: string, ffmpegPath: string = 'ffmpeg'): P
 }
 
 interface RunWhisperResult {
-  segments: TranscribeSegment[];
   timedOut: boolean;
 }
 
@@ -55,11 +54,35 @@ function runWhisperStreaming(
   onProgress: (percent: number) => void,
 ): Promise<RunWhisperResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(whisperPath, args);
+    const child = spawn(whisperPath, args, getWhisperExecutionOptions(whisperPath));
     const parser = createWhisperOutputParser({ onSegment, onProgress });
 
     let errorOutput = '';
     let isTimedOut = false;
+    let settled = false;
+    let forceKillTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanupTimers = () => {
+      if (forceKillTimeout) {
+        clearTimeout(forceKillTimeout);
+        forceKillTimeout = null;
+      }
+      clearTimeout(timeout);
+    };
+
+    const rejectOnce = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanupTimers();
+      reject(error);
+    };
+
+    const resolveOnce = (result: RunWhisperResult) => {
+      if (settled) return;
+      settled = true;
+      cleanupTimers();
+      resolve(result);
+    };
 
     child.stderr.on('data', (data: Buffer) => {
       const text = data.toString();
@@ -78,28 +101,39 @@ function runWhisperStreaming(
     const timeout = setTimeout(() => {
       isTimedOut = true;
       child.kill('SIGTERM');
-      // 超时后使用已收集的片段作为兜底结果，而不是报错
-      console.warn('whisper 转录超时，使用已收集的片段完成处理');
+
+      forceKillTimeout = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill('SIGKILL');
+        }
+      }, 5000);
     }, WHISPER_TIMEOUT_MS);
 
     child.on('close', (code, signal) => {
-      clearTimeout(timeout);
       parser.flush();
-      if (code === 0 || isTimedOut) {
-        // 正常完成或超时都返回结果（超时使用已收集的片段）
-        resolve({
-          segments: [], // 调用方会通过 onSegment 回调收集片段
-          timedOut: isTimedOut,
+
+      if (isTimedOut) {
+        rejectOnce(new Error(`whisper 转录超时（超过 ${Math.floor(WHISPER_TIMEOUT_MS / 60000)} 分钟）`));
+        return;
+      }
+
+      if (code === 0) {
+        resolveOnce({
+          timedOut: false,
         });
       } else {
         const reason = code !== null ? `退出码: ${code}` : `信号: ${signal}`;
-        reject(new Error(`whisper 进程退出，${reason}\n错误输出: ${errorOutput.trim()}`));
+        rejectOnce(new Error(`whisper 进程退出，${reason}\n错误输出: ${errorOutput.trim()}`));
       }
     });
 
     child.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
+      if (isTimedOut) {
+        rejectOnce(new Error(`whisper 转录超时（超过 ${Math.floor(WHISPER_TIMEOUT_MS / 60000)} 分钟）`));
+        return;
+      }
+
+      rejectOnce(err);
     });
   });
 }
@@ -339,7 +373,7 @@ export async function POST(request: NextRequest) {
 
     // 验证 whisper 环境
     const config = resolveWhisperConfigPaths(getWhisperConfig());
-    if (!existsSync(config.whisperPath)) {
+    if (!isValidWhisperExecutable(config.whisperPath)) {
       return NextResponse.json(
         { success: false, error: 'whisper.cpp 未安装，请在设置中安装' },
         { status: 400 }

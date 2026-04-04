@@ -538,6 +538,16 @@ function WhisperPanel({
     setConfig((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleResetProjectPaths = () => {
+    setConfig((prev) => ({
+      ...prev,
+      outputDir: "transcripts",
+      whisperPath: "whisper.cpp/build/bin/whisper-cli",
+      modelPath: `models/ggml-${selectedModel}.bin`,
+      ffmpegPath: "ffmpeg",
+    }));
+  };
+
   const modelExists = status?.modelName === selectedModel && status?.modelInstalled;
   const isBusy = installing || downloading || saving || ffmpegInstalling;
 
@@ -850,12 +860,28 @@ function WhisperPanel({
 
               {showAdvanced && (
                 <div className="grid gap-4 rounded-2xl border border-border/60 bg-background/70 p-4">
+                  <div className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      目录支持相对路径，相对于当前项目根目录解析。
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleResetProjectPaths}
+                      disabled={isBusy}
+                      className="w-full sm:w-auto"
+                    >
+                      使用当前项目默认目录
+                    </Button>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-xs font-medium">转录文件目录</label>
                     <Input
                       value={config.outputDir}
                       onChange={(e) => handleConfigChange("outputDir", e.target.value)}
-                      placeholder="memo-flow/transcripts"
+                      placeholder="transcripts"
                     />
                     <p className="text-xs text-muted-foreground">
                       转录完成后，文件将保存到此目录下（以播客标题命名的子文件夹）。
@@ -867,8 +893,11 @@ function WhisperPanel({
                     <Input
                       value={config.whisperPath}
                       onChange={(e) => handleConfigChange("whisperPath", e.target.value)}
-                      placeholder="memo-flow/whisper.cpp/build/bin/whisper-cli"
+                      placeholder="whisper.cpp/build/bin/whisper-cli"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      推荐使用当前项目内的相对路径，便于迁移目录。
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -876,8 +905,11 @@ function WhisperPanel({
                     <Input
                       value={config.modelPath}
                       onChange={(e) => handleConfigChange("modelPath", e.target.value)}
-                      placeholder="memo-flow/models/ggml-small.bin"
+                      placeholder={`models/ggml-${selectedModel}.bin`}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      模型建议放在项目内的 `models/` 目录。
+                    </p>
                   </div>
 
                   <div className="space-y-2">
