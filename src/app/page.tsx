@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FlowLoader } from '@/components/ui/flow-loader';
@@ -12,6 +12,10 @@ import TranscriptionCard from '@/components/transcription-card';
 export default function Home() {
   const [recentRecords, setRecentRecords] = useState<TranscriptionRecord[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleRecordDeleted = useCallback((recordId: string) => {
+    setRecentRecords((prev) => prev.filter((record) => record.id !== recordId));
+  }, []);
 
   useEffect(() => {
     const loadRecent = async () => {
@@ -165,7 +169,11 @@ export default function Home() {
               ) : recentRecords.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {recentRecords.map((record) => (
-                    <TranscriptionCard key={record.id} record={record} />
+                    <TranscriptionCard
+                      key={record.id}
+                      record={record}
+                      onDeleted={handleRecordDeleted}
+                    />
                   ))}
                 </div>
               ) : (

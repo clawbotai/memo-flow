@@ -11,6 +11,39 @@ export interface XiaoyuzhouEpisode {
   thumbnail?: string;
 }
 
+interface FetchEpisodeOptions {
+  signal?: AbortSignal;
+}
+
+function createTimeoutSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal {
+  if (!signal) {
+    return AbortSignal.timeout(timeoutMs);
+  }
+
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  const abortFromParent = () => controller.abort();
+
+  if (signal) {
+    if (signal.aborted) {
+      abortFromParent();
+    } else {
+      signal.addEventListener('abort', abortFromParent, { once: true });
+    }
+  }
+
+  controller.signal.addEventListener('abort', () => {
+    clearTimeout(timeout);
+  }, { once: true });
+
+  return controller.signal;
+}
+
 /**
  * 从小宇宙页面 URL 提取 episode ID
  * 格式：https://www.xiaoyuzhoufm.com/episode/{episodeId}
@@ -23,7 +56,10 @@ function extractEpisodeId(url: string): string {
 /**
  * 获取播客信息 - 多策略尝试
  */
-export async function fetchEpisodeInfo(episodeUrl: string): Promise<XiaoyuzhouEpisode> {
+export async function fetchEpisodeInfo(
+  episodeUrl: string,
+  options: FetchEpisodeOptions = {},
+): Promise<XiaoyuzhouEpisode> {
   const episodeId = extractEpisodeId(episodeUrl);
 
   if (!episodeId) {
@@ -31,15 +67,15 @@ export async function fetchEpisodeInfo(episodeUrl: string): Promise<XiaoyuzhouEp
   }
 
   // 策略1: 调用小宇宙官方 API
-  const fromApi = await fetchFromOfficialApi(episodeId);
+  const fromApi = await fetchFromOfficialApi(episodeId, options.signal);
   if (fromApi) return fromApi;
 
   // 策略2: 从页面 HTML 中提取数据
-  const fromPage = await fetchFromPageHtml(episodeId);
+  const fromPage = await fetchFromPageHtml(episodeId, options.signal);
   if (fromPage) return fromPage;
 
   // 策略3: 尝试第三方 API
-  const fromThirdParty = await fetchFromThirdPartyApi(episodeId);
+  const fromThirdParty = await fetchFromThirdPartyApi(episodeId, options.signal);
   if (fromThirdParty) return fromThirdParty;
 
   throw new Error('无法获取播客音频链接，请检查链接是否正确或稍后重试');
@@ -48,7 +84,10 @@ export async function fetchEpisodeInfo(episodeUrl: string): Promise<XiaoyuzhouEp
 /**
  * 策略1: 调用小宇宙官方 API
  */
-async function fetchFromOfficialApi(episodeId: string): Promise<XiaoyuzhouEpisode | null> {
+async function fetchFromOfficialApi(
+  episodeId: string,
+  signal?: AbortSignal,
+): Promise<XiaoyuzhouEpisode | null> {
   try {
     const response = await fetch('https://api.xiaoyuzhoufm.com/v1/episode/get', {
       method: 'POST',
@@ -59,7 +98,7 @@ async function fetchFromOfficialApi(episodeId: string): Promise<XiaoyuzhouEpisod
         'app-version': '1.6.0',
       },
       body: JSON.stringify({ eid: episodeId }),
-      signal: AbortSignal.timeout(10000),
+      signal: createTimeoutSignal(10000, signal),
     });
 
     if (!response.ok) {
@@ -82,6 +121,9 @@ async function fetchFromOfficialApi(episodeId: string): Promise<XiaoyuzhouEpisod
       thumbnail: data?.data?.image?.picUrl || data?.data?.podcast?.image?.picUrl || '',
     };
   } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
     console.log('Official API failed:', error instanceof Error ? error.message : error);
     return null;
   }
@@ -90,14 +132,17 @@ async function fetchFromOfficialApi(episodeId: string): Promise<XiaoyuzhouEpisod
 /**
  * 策略2: 从小宇宙页面 HTML 中提取 __NEXT_DATA__
  */
-async function fetchFromPageHtml(episodeId: string): Promise<XiaoyuzhouEpisode | null> {
+async function fetchFromPageHtml(
+  episodeId: string,
+  signal?: AbortSignal,
+): Promise<XiaoyuzhouEpisode | null> {
   try {
     const response = await fetch(`https://www.xiaoyuzhoufm.com/episode/${episodeId}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
-      signal: AbortSignal.timeout(15000),
+      signal: createTimeoutSignal(15000, signal),
     });
 
     if (!response.ok) return null;
@@ -157,6 +202,9 @@ async function fetchFromPageHtml(episodeId: string): Promise<XiaoyuzhouEpisode |
 
     return null;
   } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
     console.log('Page HTML extraction failed:', error instanceof Error ? error.message : error);
     return null;
   }
@@ -165,13 +213,16 @@ async function fetchFromPageHtml(episodeId: string): Promise<XiaoyuzhouEpisode |
 /**
  * 策略3: 第三方 API (music.moon.fm)
  */
-async function fetchFromThirdPartyApi(episodeId: string): Promise<XiaoyuzhouEpisode | null> {
+async function fetchFromThirdPartyApi(
+  episodeId: string,
+  signal?: AbortSignal,
+): Promise<XiaoyuzhouEpisode | null> {
   try {
     const response = await fetch(`https://music.moon.fm/api/v1/episodes/${episodeId}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
       },
-      signal: AbortSignal.timeout(10000),
+      signal: createTimeoutSignal(10000, signal),
     });
 
     if (!response.ok) return null;
@@ -190,6 +241,9 @@ async function fetchFromThirdPartyApi(episodeId: string): Promise<XiaoyuzhouEpis
       thumbnail: data.podcast?.coverImage?.urlPattern || data.coverImageUrl || '',
     };
   } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
     console.log('Third-party API failed:', error instanceof Error ? error.message : error);
     return null;
   }

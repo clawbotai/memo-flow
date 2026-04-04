@@ -125,6 +125,22 @@ export default function PodcastPage() {
     transcribeEsRef.current = null;
   }, [clearReconnectTimer]);
 
+  const resetActiveTaskState = useCallback(() => {
+    transcribeFinishedRef.current = true;
+    activeTaskIdRef.current = null;
+    closeEventSource();
+    setTaskId(null);
+    setPodcastTranscript('');
+    setPodcastAudioInfo(null);
+    setLiveSegments([]);
+    setTranscribeProgress(null);
+    setTranscribeStage('');
+    setTranscribeStatus('');
+    setEpisodeTitle('');
+    setSavedPath('');
+    setFinalSegments([]);
+  }, [closeEventSource]);
+
   const connectToTranscribeProgress = useCallback((currentTaskId: string) => {
     clearReconnectTimer();
     transcribeEsRef.current?.close();
@@ -309,6 +325,15 @@ export default function PodcastPage() {
       setToast({ message: '网络错误，请检查连接', type: 'error' });
     }
   }, [closeEventSource, connectToTranscribeProgress, isLoading, podcastUrl]);
+
+  const handleRecordDeleted = useCallback((recordId: string) => {
+    setTranscriptionHistory((prev) => prev.filter((record) => record.id !== recordId));
+
+    if (taskId === recordId || activeTaskIdRef.current === recordId) {
+      resetActiveTaskState();
+      setToast({ message: '转录任务已删除', type: 'info' });
+    }
+  }, [resetActiveTaskState, taskId]);
 
   const getButtonLabel = () => {
     if (!isLoading) return '开始转录';
@@ -564,7 +589,11 @@ export default function PodcastPage() {
               ) : transcriptionHistory.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {transcriptionHistory.map((record) => (
-                    <TranscriptionCard key={record.id} record={record} />
+                    <TranscriptionCard
+                      key={record.id}
+                      record={record}
+                      onDeleted={handleRecordDeleted}
+                    />
                   ))}
                 </div>
               ) : (

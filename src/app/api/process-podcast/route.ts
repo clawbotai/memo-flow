@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchEpisodeInfo } from '@/lib/xiaoyuzhou';
-import { getWhisperConfig, getWhisperExecutionOptions, isValidWhisperExecutable, resolveWhisperConfigPaths } from '@/lib/whisper-config';
+import {
+  getWhisperConfig,
+  getWhisperExecutionOptions,
+  isValidWhisperExecutable,
+  resolveWhisperConfigPaths,
+} from '@/lib/whisper-config';
 import { existsSync } from 'fs';
-import { writeFile, mkdir, unlink, readFile } from 'fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { execFile, spawn } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import type { TranscribeSegment } from '@/types';
 import {
   addTranscriptionRecord,
@@ -23,40 +27,128 @@ import {
   parseSrtSegments,
 } from '@/lib/transcription-output';
 import { saveEpisodeTranscriptionFiles } from '@/lib/transcription-files';
+import {
+  clearTranscriptionTaskResource,
+  completeTranscriptionTask,
+  isTranscriptionTaskCancelled,
+  isTranscriptionTaskCancelledError,
+  registerTranscriptionTask,
+  throwIfTranscriptionTaskCancelled,
+  TranscriptionTaskCancelledError,
+  updateTranscriptionTask,
+} from '@/lib/transcription-task-manager';
 
-const execFileAsync = promisify(execFile);
-
-// CPU 模式下延长至 30 分钟
 const WHISPER_TIMEOUT_MS = 30 * 60 * 1000;
-
 const TEMP_DIR = path.join(os.tmpdir(), 'memo-flow');
 
-/**
- * Convert audio to 16kHz mono WAV using ffmpeg
- */
-async function convertToWav(inputPath: string, ffmpegPath: string = 'ffmpeg'): Promise<string> {
+async function safeUnlink(filePath: string) {
+  if (!filePath) return;
+  try {
+    if (existsSync(filePath)) {
+      await unlink(filePath);
+    }
+  } catch (error) {
+    console.error('Failed to delete temp file:', error);
+  }
+}
+
+function writeTaskProgress(taskId: string, data: Parameters<typeof writeTranscribeProgress>[1]) {
+  if (isTranscriptionTaskCancelled(taskId)) {
+    return;
+  }
+
+  writeTranscribeProgress(taskId, data);
+}
+
+async function updateTaskRecord(
+  taskId: string,
+  updates: Parameters<typeof updateTranscriptionRecord>[1],
+) {
+  if (isTranscriptionTaskCancelled(taskId)) {
+    return null;
+  }
+
+  return updateTranscriptionRecord(taskId, updates);
+}
+
+async function convertToWav(inputPath: string, ffmpegPath: string, taskId: string): Promise<string> {
   const wavPath = inputPath.replace(path.extname(inputPath), '.wav');
 
-  await execFileAsync(ffmpegPath, [
-    '-i', inputPath,
-    '-ar', '16000',
-    '-ac', '1',
-    '-c:a', 'pcm_s16le',
-    '-y',
-    wavPath,
-  ], { timeout: 120000 });
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(ffmpegPath, [
+      '-i', inputPath,
+      '-ar', '16000',
+      '-ac', '1',
+      '-c:a', 'pcm_s16le',
+      '-y',
+      wavPath,
+    ], getWhisperExecutionOptions(ffmpegPath));
+
+    updateTranscriptionTask(taskId, {
+      status: 'converting',
+      ffmpegProcess: child,
+      wavPath,
+    });
+
+    let stderr = '';
+    let settled = false;
+
+    const rejectOnce = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    const resolveOnce = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    child.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+      if (stderr.length > 2000) {
+        stderr = stderr.slice(-2000);
+      }
+    });
+
+    child.on('close', (code, signal) => {
+      clearTranscriptionTaskResource(taskId, 'ffmpegProcess');
+
+      if (isTranscriptionTaskCancelled(taskId)) {
+        rejectOnce(new TranscriptionTaskCancelledError(taskId));
+        return;
+      }
+
+      if (code === 0) {
+        resolveOnce();
+        return;
+      }
+
+      const reason = code !== null ? `退出码: ${code}` : `信号: ${signal}`;
+      rejectOnce(new Error(`ffmpeg 转换失败，${reason}\n错误输出: ${stderr.trim()}`));
+    });
+
+    child.on('error', (error) => {
+      clearTranscriptionTaskResource(taskId, 'ffmpegProcess');
+      if (isTranscriptionTaskCancelled(taskId)) {
+        rejectOnce(new TranscriptionTaskCancelledError(taskId));
+        return;
+      }
+
+      rejectOnce(error);
+    });
+  });
 
   return wavPath;
 }
 
-/**
- * Run whisper via spawn, capturing segments in real-time
- */
 interface RunWhisperResult {
   timedOut: boolean;
 }
 
 function runWhisperStreaming(
+  taskId: string,
   whisperPath: string,
   args: string[],
   onSegment: (segment: TranscribeSegment) => void,
@@ -66,10 +158,15 @@ function runWhisperStreaming(
     const child = spawn(whisperPath, args, getWhisperExecutionOptions(whisperPath));
     const parser = createWhisperOutputParser({ onSegment, onProgress });
 
+    updateTranscriptionTask(taskId, {
+      status: 'transcribing',
+      whisperProcess: child,
+    });
+
     let errorOutput = '';
     let isTimedOut = false;
     let settled = false;
-    let forceKillTimeout: ReturnType<typeof setTimeout> | null = null;
+    let forceKillTimeout: NodeJS.Timeout | null = null;
 
     const cleanupTimers = () => {
       if (forceKillTimeout) {
@@ -77,6 +174,7 @@ function runWhisperStreaming(
         forceKillTimeout = null;
       }
       clearTimeout(timeout);
+      clearTranscriptionTaskResource(taskId, 'whisperProcess');
     };
 
     const rejectOnce = (error: Error) => {
@@ -96,7 +194,6 @@ function runWhisperStreaming(
     child.stderr.on('data', (data: Buffer) => {
       const text = data.toString();
       errorOutput += text;
-      // 保持最多 2000 个字符
       if (errorOutput.length > 2000) {
         errorOutput = errorOutput.slice(-2000);
       }
@@ -121,41 +218,49 @@ function runWhisperStreaming(
     child.on('close', (code, signal) => {
       parser.flush();
 
+      if (isTranscriptionTaskCancelled(taskId)) {
+        rejectOnce(new TranscriptionTaskCancelledError(taskId));
+        return;
+      }
+
       if (isTimedOut) {
         rejectOnce(new Error(`whisper 转录超时（超过 ${Math.floor(WHISPER_TIMEOUT_MS / 60000)} 分钟）`));
         return;
       }
 
       if (code === 0) {
-        resolveOnce({
-          timedOut: false,
-        });
-      } else {
-        const reason = code !== null ? `退出码: ${code}` : `信号: ${signal}`;
-        rejectOnce(new Error(`whisper 进程退出，${reason}\n错误输出: ${errorOutput.trim()}`));
+        resolveOnce({ timedOut: false });
+        return;
       }
+
+      const reason = code !== null ? `退出码: ${code}` : `信号: ${signal}`;
+      rejectOnce(new Error(`whisper 进程退出，${reason}\n错误输出: ${errorOutput.trim()}`));
     });
 
-    child.on('error', (err) => {
+    child.on('error', (error) => {
+      if (isTranscriptionTaskCancelled(taskId)) {
+        rejectOnce(new TranscriptionTaskCancelledError(taskId));
+        return;
+      }
+
       if (isTimedOut) {
         rejectOnce(new Error(`whisper 转录超时（超过 ${Math.floor(WHISPER_TIMEOUT_MS / 60000)} 分钟）`));
         return;
       }
 
-      rejectOnce(err);
+      rejectOnce(error);
     });
   });
 }
 
-/**
- * Background processing pipeline
- */
 async function processInBackground(taskId: string, url: string) {
+  registerTranscriptionTask(taskId);
+
   let audioPath = '';
   let wavPath = '';
+  let srtPath = '';
 
   try {
-    // 在开始时创建新的转录记录
     const initialRecord: Omit<TranscriptionRecord, 'id' | 'createdAt' | 'updatedAt'> = {
       taskId,
       title: '未知标题',
@@ -165,57 +270,74 @@ async function processInBackground(taskId: string, url: string) {
     };
 
     await addTranscriptionRecord(initialRecord);
+    throwIfTranscriptionTaskCancelled(taskId);
 
-    // Stage 1: 获取播客信息
-    writeTranscribeProgress(taskId, {
+    writeTaskProgress(taskId, {
       status: 'fetching_info',
       stage: '正在获取播客信息...',
     });
 
-    const episodeInfo = await fetchEpisodeInfo(url);
+    const infoController = new AbortController();
+    updateTranscriptionTask(taskId, {
+      status: 'fetching_info',
+      fetchController: infoController,
+    });
+
+    const episodeInfo = await fetchEpisodeInfo(url, { signal: infoController.signal });
+    clearTranscriptionTaskResource(taskId, 'fetchController');
+    throwIfTranscriptionTaskCancelled(taskId);
+
     if (!episodeInfo.audioUrl) {
-      writeTranscribeProgress(taskId, {
+      writeTaskProgress(taskId, {
         status: 'error',
         stage: '获取失败',
         error: '未能从小宇宙播客中提取到音频链接',
       });
 
-      await updateTranscriptionRecord(taskId, {
+      await updateTaskRecord(taskId, {
         status: 'error',
         progress: null,
       });
-
       return;
     }
 
     const audioUrl = episodeInfo.audioUrl;
 
-    // 更新转录记录标题
-    await updateTranscriptionRecord(taskId, {
+    await updateTaskRecord(taskId, {
       title: episodeInfo.title,
       audioUrl,
     });
+    throwIfTranscriptionTaskCancelled(taskId);
 
-    // Stage 2: 下载音频
-    writeTranscribeProgress(taskId, {
+    writeTaskProgress(taskId, {
       status: 'downloading_audio',
       stage: '正在下载音频文件...',
       audioUrl,
       episodeTitle: episodeInfo.title,
     });
 
-    await updateTranscriptionRecord(taskId, {
+    await updateTaskRecord(taskId, {
       status: 'downloading_audio',
       progress: 10,
     });
 
     await mkdir(TEMP_DIR, { recursive: true });
-    const fileName = `audio_${taskId}.mp3`;
-    audioPath = path.join(TEMP_DIR, fileName);
+    audioPath = path.join(TEMP_DIR, `audio_${taskId}.mp3`);
 
-    const audioResponse = await fetch(audioUrl);
+    const downloadController = new AbortController();
+    updateTranscriptionTask(taskId, {
+      status: 'downloading_audio',
+      downloadController,
+      audioPath,
+    });
+
+    const audioResponse = await fetch(audioUrl, {
+      signal: downloadController.signal,
+    });
+
     if (!audioResponse.ok) {
-      writeTranscribeProgress(taskId, {
+      clearTranscriptionTaskResource(taskId, 'downloadController');
+      writeTaskProgress(taskId, {
         status: 'error',
         stage: '下载失败',
         audioUrl,
@@ -223,39 +345,49 @@ async function processInBackground(taskId: string, url: string) {
         error: '无法下载音频文件',
       });
 
-      await updateTranscriptionRecord(taskId, {
+      await updateTaskRecord(taskId, {
         status: 'error',
         progress: null,
       });
-
       return;
     }
 
     const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+    clearTranscriptionTaskResource(taskId, 'downloadController');
+    throwIfTranscriptionTaskCancelled(taskId);
     await writeFile(audioPath, audioBuffer);
 
-    // Stage 3: 转换格式
-    writeTranscribeProgress(taskId, {
+    writeTaskProgress(taskId, {
       status: 'converting',
       stage: '正在转换音频格式...',
       audioUrl,
       episodeTitle: episodeInfo.title,
     });
 
-    await updateTranscriptionRecord(taskId, {
+    await updateTaskRecord(taskId, {
       status: 'converting',
       progress: 20,
     });
 
     const config = resolveWhisperConfigPaths(getWhisperConfig());
-    wavPath = await convertToWav(audioPath, config.ffmpegPath);
+    wavPath = await convertToWav(audioPath, config.ffmpegPath, taskId);
+    srtPath = `${wavPath}.srt`;
+    updateTranscriptionTask(taskId, {
+      status: 'converting',
+      wavPath,
+      srtPath,
+    });
+    throwIfTranscriptionTaskCancelled(taskId);
 
-    // Stage 4: 转录
     const segments: TranscribeSegment[] = [];
     let lastWriteTime = 0;
     let currentProgress = 30;
 
     const flushLiveState = (force = false) => {
+      if (isTranscriptionTaskCancelled(taskId)) {
+        return;
+      }
+
       const now = Date.now();
       if (!force && now - lastWriteTime < 500) {
         return;
@@ -265,7 +397,7 @@ async function processInBackground(taskId: string, url: string) {
       const transcript = buildTranscriptFromSegments(segments);
       const snapshot = [...segments];
 
-      writeTranscribeProgress(taskId, {
+      writeTaskProgress(taskId, {
         status: 'transcribing',
         stage: '正在转录中...',
         audioUrl,
@@ -275,14 +407,14 @@ async function processInBackground(taskId: string, url: string) {
         progress: currentProgress,
       });
 
-      updateTranscriptionRecord(taskId, {
+      updateTaskRecord(taskId, {
         segments: snapshot,
         transcript,
         progress: currentProgress,
       }).catch(console.error);
     };
 
-    writeTranscribeProgress(taskId, {
+    writeTaskProgress(taskId, {
       status: 'transcribing',
       stage: '正在转录中...',
       audioUrl,
@@ -292,13 +424,14 @@ async function processInBackground(taskId: string, url: string) {
       progress: currentProgress,
     });
 
-    await updateTranscriptionRecord(taskId, {
+    await updateTaskRecord(taskId, {
       status: 'transcribing',
       progress: currentProgress,
       transcript: '',
     });
 
     const { timedOut } = await runWhisperStreaming(
+      taskId,
       config.whisperPath,
       [
         '-m', config.modelPath,
@@ -307,29 +440,36 @@ async function processInBackground(taskId: string, url: string) {
         '-t', config.threads.toString(),
         '--print-progress',
         '--output-srt',
-        '-ng', // 禁用 GPU，使用 CPU 运行以避免 Metal 内存问题
+        '-ng',
       ],
       (segment) => {
+        if (isTranscriptionTaskCancelled(taskId)) {
+          return;
+        }
+
         segments.push(segment);
         flushLiveState();
       },
       (percent) => {
+        if (isTranscriptionTaskCancelled(taskId)) {
+          return;
+        }
+
         currentProgress = percent;
         flushLiveState();
       },
     );
+
+    throwIfTranscriptionTaskCancelled(taskId);
 
     if (timedOut) {
       console.warn(`转录任务 ${taskId} 已超时，使用已收集的 ${segments.length} 个片段完成处理`);
     }
 
     flushLiveState(true);
+    throwIfTranscriptionTaskCancelled(taskId);
 
-    // 读取最终转录文件
-    // whisper.cpp --output-srt 生成的文件名是在输入文件名后直接追加 .srt
-    // 例如：audio_xxx.wav → audio_xxx.wav.srt
     let finalSegments = [...segments];
-    const srtPath = wavPath + '.srt';
     if (existsSync(srtPath)) {
       const srtContent = await readFile(srtPath, 'utf8');
       const srtSegments = parseSrtSegments(srtContent);
@@ -338,9 +478,10 @@ async function processInBackground(taskId: string, url: string) {
       }
       await safeUnlink(srtPath);
     }
+
+    throwIfTranscriptionTaskCancelled(taskId);
     const transcript = buildTranscriptFromSegments(finalSegments).trim();
 
-    // 保存文件到输出目录
     let savedPath = '';
     try {
       savedPath = await saveEpisodeTranscriptionFiles(
@@ -350,12 +491,13 @@ async function processInBackground(taskId: string, url: string) {
         transcript,
         url,
       );
-    } catch (saveErr) {
-      console.error('保存转录文件失败:', saveErr);
+    } catch (error) {
+      console.error('保存转录文件失败:', error);
     }
 
-    // Stage 5: 完成
-    writeTranscribeProgress(taskId, {
+    throwIfTranscriptionTaskCancelled(taskId);
+
+    writeTaskProgress(taskId, {
       status: 'completed',
       stage: '转录完成',
       audioUrl,
@@ -368,8 +510,7 @@ async function processInBackground(taskId: string, url: string) {
       savedPath,
     });
 
-    // 更新转录记录为完成状态
-    await updateTranscriptionRecord(taskId, {
+    await updateTaskRecord(taskId, {
       status: 'completed',
       progress: 100,
       transcript,
@@ -379,25 +520,37 @@ async function processInBackground(taskId: string, url: string) {
       segments: finalSegments,
     });
   } catch (error) {
+    if (isTranscriptionTaskCancelledError(error) || isTranscriptionTaskCancelled(taskId)) {
+      return;
+    }
+
     console.error('Background transcription error:', error);
-    writeTranscribeProgress(taskId, {
+    writeTaskProgress(taskId, {
       status: 'error',
       stage: '转录失败',
       error: error instanceof Error ? error.message : '处理播客失败',
     });
 
-    await updateTranscriptionRecord(taskId, {
+    await updateTaskRecord(taskId, {
       status: 'error',
       progress: null,
     });
   } finally {
-    // 清理音频临时文件
+    clearTranscriptionTaskResource(taskId, 'fetchController');
+    clearTranscriptionTaskResource(taskId, 'downloadController');
+
     await safeUnlink(audioPath);
     await safeUnlink(wavPath);
+    await safeUnlink(srtPath);
 
-    // 延迟清理进度文件
     const progressPath = getProgressFilePath(taskId);
-    setTimeout(() => safeUnlink(progressPath), 60000);
+    if (isTranscriptionTaskCancelled(taskId)) {
+      await safeUnlink(progressPath);
+    } else {
+      setTimeout(() => safeUnlink(progressPath), 60000);
+    }
+
+    completeTranscriptionTask(taskId);
   }
 }
 
@@ -408,28 +561,26 @@ export async function POST(request: NextRequest) {
     if (!url) {
       return NextResponse.json(
         { success: false, error: 'URL is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // 验证 whisper 环境
     const config = resolveWhisperConfigPaths(getWhisperConfig());
 
     if (!isValidWhisperExecutable(config.whisperPath)) {
       return NextResponse.json(
         { success: false, error: 'whisper.cpp 未安装，请在设置中安装' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!existsSync(config.modelPath)) {
       return NextResponse.json(
         { success: false, error: '模型文件不存在，请在设置中下载模型' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // 生成 taskId，启动后台处理
     const taskId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     await mkdir(TEMP_DIR, { recursive: true });
@@ -438,9 +589,8 @@ export async function POST(request: NextRequest) {
       stage: '准备中...',
     });
 
-    // Fire-and-forget
-    processInBackground(taskId, url).catch((err) => {
-      console.error('Unhandled background error:', err);
+    processInBackground(taskId, url).catch((error) => {
+      console.error('Unhandled background error:', error);
     });
 
     return NextResponse.json({
@@ -451,16 +601,7 @@ export async function POST(request: NextRequest) {
     console.error('Process podcast error:', error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : '处理播客失败' },
-      { status: 500 }
+      { status: 500 },
     );
-  }
-}
-
-async function safeUnlink(filePath: string) {
-  if (!filePath) return;
-  try {
-    if (existsSync(filePath)) await unlink(filePath);
-  } catch (e) {
-    console.error('Failed to delete temp file:', e);
   }
 }

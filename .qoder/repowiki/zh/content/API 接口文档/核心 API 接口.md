@@ -10,6 +10,8 @@
 - [whisper-download-progress/route.ts](file://src/app/api/whisper-download-progress/route.ts)
 - [whisper-install/route.ts](file://src/app/api/whisper-install/route.ts)
 - [whisper-install-progress/route.ts](file://src/app/api/whisper-install-progress/route.ts)
+- [ffmpeg-install/route.ts](file://src/app/api/ffmpeg-install/route.ts)
+- [ffmpeg-install-progress/route.ts](file://src/app/api/ffmpeg-install-progress/route.ts)
 - [transcription-history/route.ts](file://src/app/api/transcription-history/route.ts)
 - [retranscribe/route.ts](file://src/app/api/retranscribe/route.ts)
 - [transcription-live/route.ts](file://src/app/api/transcription-live/route.ts)
@@ -18,8 +20,8 @@
 - [transcription-output.ts](file://src/lib/transcription-output.ts)
 - [transcription-files.ts](file://src/lib/transcription-files.ts)
 - [whisper-config.ts](file://src/lib/whisper-config.ts)
-- [xiaoyuzhou.ts](file://src/lib/xiaoyuzhou.ts)
 - [whisper.ts](file://src/lib/whisper.ts)
+- [xiaoyuzhou.ts](file://src/lib/xiaoyuzhou.ts)
 - [index.ts](file://src/types/index.ts)
 - [transcription-history.ts](file://src/types/transcription-history.ts)
 - [package.json](file://package.json)
@@ -27,15 +29,12 @@
 
 ## 更新摘要
 **所做更改**
-- 新增转录历史管理API端点（/api/transcription-history CRUD操作）
-- 新增重新转录功能API端点（/api/retranscribe）
-- 新增实时转录流API端点（/api/transcription-live）
-- 扩展播客处理流程以支持历史记录管理
-- 增强转录进度跟踪和状态监控功能
-- 完善转录历史数据持久化机制
-- 优化实时进度合并策略和状态同步
-- **新增智能超时处理机制**：CPU-only处理延长至30分钟，增强错误捕获和优雅降级机制
-- **更新转录超时处理**：超时情况下返回已收集的片段而非完全失败
+- 新增 Whisper 安装 API 端点（/api/whisper-install 和 /api/whisper-install-progress）
+- 新增 FFmpeg 安装 API 端点（/api/ffmpeg-install 和 /api/ffmpeg-install-progress）
+- 改进转录进度查询接口（/api/transcribe-progress），增强 Server-Sent Events 进度报告
+- 新增自动重连机制和错误处理优化
+- 完善安装进度的实时监控和状态管理
+- 增强系统依赖管理的自动化程度
 
 ## 目录
 1. [简介](#简介)
@@ -52,13 +51,13 @@
 
 MemoFlow 是一个基于 AI 的内容分析与创作助手，专注于从播客内容中提取核心观点并生成笔记。本文档详细介绍了系统的核心 API 接口，特别是播客处理接口的工作流程，以及 Whisper 语音识别配置管理的相关功能。
 
-**更新** 新增了完整的转录历史管理、重新转录和实时监控功能，包括：
-- 转录历史的完整 CRUD 操作
-- 重新转录机制，支持对已有记录的重新处理
-- 实时转录进度的 Server-Sent Events 流
-- 增强的状态管理和数据持久化
-- 优化的进度文件合并策略
-- **智能超时处理机制**：CPU-only处理延长至30分钟，确保超时情况下返回已收集的片段而非完全失败
+**更新** 新增了完整的依赖安装管理 API，包括：
+- Whisper.cpp 的自动安装和进度监控
+- FFmpeg 的自动安装和进度监控  
+- 改进的转录进度查询，支持自动重连机制
+- 增强的 Server-Sent Events 实时进度报告
+- 完善的错误处理和状态同步机制
+- **智能超时处理机制**：CPU-only处理延长至30分钟，增强错误捕获和优雅降级机制
 
 ## 项目结构
 
@@ -78,6 +77,8 @@ WD[whisper-download/route.ts]
 WDP[whisper-download-progress/route.ts]
 WI[whisper-install/route.ts]
 WIP[whisper-install-progress/route.ts]
+FI[ffmpeg-install/route.ts]
+FIP[ffmpeg-install-progress/route.ts]
 end
 subgraph "业务逻辑层"
 XC[xiaoyuzhou.ts]
@@ -100,6 +101,7 @@ PP --> TPROG
 PP --> TO
 PP --> TF
 TP --> TYPES
+TP --> TPROG
 TH --> THL
 TH --> TH_TYPES
 RT --> THL
@@ -116,6 +118,8 @@ WD --> TYPES
 WDP --> TYPES
 WI --> WCFG
 WIP --> TYPES
+FI --> WCFG
+FIP --> TYPES
 WCFG --> TYPES
 THL --> TYPES
 THL --> TH_TYPES
@@ -129,12 +133,20 @@ TF --> TYPES
 - [transcription-history/route.ts:1-80](file://src/app/api/transcription-history/route.ts#L1-L80)
 - [retranscribe/route.ts:1-391](file://src/app/api/retranscribe/route.ts#L1-L391)
 - [transcription-live/route.ts:1-119](file://src/app/api/transcription-live/route.ts#L1-L119)
+- [whisper-install/route.ts:1-220](file://src/app/api/whisper-install/route.ts#L1-L220)
+- [whisper-install-progress/route.ts:1-101](file://src/app/api/whisper-install-progress/route.ts#L1-L101)
+- [ffmpeg-install/route.ts:1-229](file://src/app/api/ffmpeg-install/route.ts#L1-L229)
+- [ffmpeg-install-progress/route.ts:1-101](file://src/app/api/ffmpeg-install-progress/route.ts#L1-L101)
 
 **章节来源**
 - [process-podcast/route.ts:1-433](file://src/app/api/process-podcast/route.ts#L1-L433)
 - [transcription-history/route.ts:1-80](file://src/app/api/transcription-history/route.ts#L1-L80)
 - [retranscribe/route.ts:1-391](file://src/app/api/retranscribe/route.ts#L1-L391)
 - [transcription-live/route.ts:1-119](file://src/app/api/transcription-live/route.ts#L1-L119)
+- [whisper-install/route.ts:1-220](file://src/app/api/whisper-install/route.ts#L1-L220)
+- [whisper-install-progress/route.ts:1-101](file://src/app/api/whisper-install-progress/route.ts#L1-L101)
+- [ffmpeg-install/route.ts:1-229](file://src/app/api/ffmpeg-install/route.ts#L1-L229)
+- [ffmpeg-install-progress/route.ts:1-101](file://src/app/api/ffmpeg-install-progress/route.ts#L1-L101)
 
 ## 核心组件
 
@@ -155,14 +167,17 @@ class WhisperConfig {
 +string modelName
 +number threads
 +string outputDir
++string ffmpegPath
 }
 class WhisperStatus {
 +boolean whisperInstalled
 +boolean modelInstalled
++boolean ffmpegInstalled
 +string whisperPath
 +string modelPath
 +string modelName
 +string modelSize
++string ffmpegPath
 }
 class XiaoyuzhouEpisode {
 +string title
@@ -211,21 +226,27 @@ class TranscriptionHistoryState {
 +TranscriptionRecord[] records
 +Date lastUpdated
 }
+class InstallProgress {
++'idle' | 'cloning' | 'compiling' | 'completed' | 'error' status
++string step
++string error
+}
 ApiResponse --> WhisperConfig
 ApiResponse --> WhisperStatus
 ApiResponse --> XiaoyuzhouEpisode
 ApiResponse --> TranscribeProgress
 ApiResponse --> TranscriptionRecord
+ApiResponse --> InstallProgress
 TranscribeProgress --> TranscribeSegment
 TranscriptionRecord --> TranscribeSegment
 ```
 
 **图表来源**
-- [index.ts:1-43](file://src/types/index.ts#L1-L43)
+- [index.ts:1-46](file://src/types/index.ts#L1-L46)
 - [transcription-history.ts:1-23](file://src/types/transcription-history.ts#L1-L23)
 
 **章节来源**
-- [index.ts:1-43](file://src/types/index.ts#L1-L43)
+- [index.ts:1-46](file://src/types/index.ts#L1-L46)
 - [transcription-history.ts:1-23](file://src/types/transcription-history.ts#L1-L23)
 
 ## 架构概览
@@ -397,7 +418,7 @@ HandleError --> CompleteProcessing
 
 ### 转录进度查询接口 (GET /api/transcribe-progress)
 
-**功能**: 通过 Server-Sent Events 推送转录进度状态
+**功能**: 通过 Server-Sent Events 推送转录进度状态，支持自动重连机制
 
 **请求方法**: `GET`
 **请求地址**: `/api/transcribe-progress?taskId=xxx`
@@ -428,8 +449,16 @@ HandleError --> CompleteProcessing
 }
 ```
 
+**更新** 改进的自动重连机制：
+
+- **连接状态监控**: 实时监控客户端连接状态
+- **自动重连**: 断开后自动重新建立 SSE 连接
+- **状态同步**: 重新连接时立即同步当前状态
+- **错误处理**: 完善的异常捕获和错误状态报告
+- **资源清理**: 正确清理定时器和事件监听器
+
 **章节来源**
-- [transcribe-progress/route.ts:32-122](file://src/app/api/transcribe-progress/route.ts#L32-L122)
+- [transcribe-progress/route.ts:32-139](file://src/app/api/transcribe-progress/route.ts#L32-L139)
 
 ### 转录历史管理接口
 
@@ -567,7 +596,8 @@ HandleError --> CompleteProcessing
     "modelPath": "string",      // 模型文件路径
     "modelName": "string",      // 模型名称 (tiny/base/small/medium/large)
     "threads": 0,               // 线程数
-    "outputDir": "string"       // 输出目录
+    "outputDir": "string",      // 输出目录
+    "ffmpegPath": "string"      // FFmpeg 可执行文件路径
   }
 }
 ```
@@ -586,7 +616,8 @@ HandleError --> CompleteProcessing
   "modelPath": "string",      // 模型文件路径，必填
   "modelName": "string",      // 模型名称，必填
   "threads": 0,               // 线程数，必填，必须是正整数
-  "outputDir": "string"       // 输出目录，可选
+  "outputDir": "string",      // 输出目录，可选
+  "ffmpegPath": "string"      // FFmpeg 可执行文件路径，可选
 }
 ```
 
@@ -596,6 +627,7 @@ HandleError --> CompleteProcessing
 - `modelName`: 必填，必须是 `tiny`、`base`、`small`、`medium` 或 `large` 之一
 - `threads`: 必填，必须是正整数
 - `outputDir`: 可选，字符串类型
+- `ffmpegPath`: 可选，字符串类型
 
 **响应格式**: 与 GET 请求相同
 
@@ -617,10 +649,12 @@ HandleError --> CompleteProcessing
   "data": {
     "whisperInstalled": true,    // Whisper 是否已安装
     "modelInstalled": true,      // 模型文件是否存在
+    "ffmpegInstalled": true,     // FFmpeg 是否已安装
     "whisperPath": "string",     // Whisper 路径
     "modelPath": "string",       // 模型路径
     "modelName": "string",       // 模型名称
-    "modelSize": "string"        // 模型文件大小 (如 "462 MB")
+    "modelSize": "string",       // 模型文件大小 (如 "462 MB")
+    "ffmpegPath": "string"       // FFmpeg 路径
   }
 }
 ```
@@ -709,9 +743,63 @@ HandleError --> CompleteProcessing
 }
 ```
 
+**安装流程**:
+1. **克隆仓库**: 从 GitHub 克隆 whisper.cpp 仓库
+2. **检查依赖**: 验证 cmake 是否可用，必要时自动安装
+3. **编译构建**: 使用 CMake 进行编译，支持多平台
+4. **权限验证**: 确保可执行文件具有正确的权限
+5. **配置更新**: 更新配置文件中的路径信息
+6. **进度清理**: 安装完成后清理进度文件
+
 **章节来源**
 - [whisper-install/route.ts:102-142](file://src/app/api/whisper-install/route.ts#L102-L142)
 - [whisper-install-progress/route.ts:23-100](file://src/app/api/whisper-install-progress/route.ts#L23-L100)
+
+### FFmpeg 安装接口
+
+#### POST /api/ffmpeg-install
+
+**功能**: 后台安装 FFmpeg 依赖
+
+**请求方法**: `POST`
+**请求地址**: `/api/ffmpeg-install`
+
+**响应格式**:
+```json
+{
+  "success": true,
+  "message": "ffmpeg 安装已在后台启动",  // 或 "ffmpeg 已经安装"
+  "alreadyInstalled": true,  // 当已安装时返回
+  "ffmpegPath": "string"     // 实际使用的 FFmpeg 路径
+}
+```
+
+#### GET /api/ffmpeg-install-progress
+
+**功能**: 通过 Server-Sent Events 推送安装进度
+
+**请求方法**: `GET`
+**请求地址**: `/api/ffmpeg-install-progress`
+
+**响应格式**:
+```json
+{
+  "status": "'idle' | 'installing' | 'completed' | 'error'",  // 状态
+  "step": "string",  // 当前步骤描述
+  "error": "string"  // 错误信息（当状态为 error 时）
+}
+```
+
+**安装流程**:
+1. **环境检查**: 检查 Homebrew 是否可用
+2. **依赖修复**: 修复常见的依赖链接问题
+3. **安装执行**: 通过 Homebrew 安装 FFmpeg
+4. **版本验证**: 验证安装结果并处理特殊情况
+5. **路径更新**: 更新配置文件中的 FFmpeg 路径
+
+**章节来源**
+- [ffmpeg-install/route.ts:186-229](file://src/app/api/ffmpeg-install/route.ts#L186-L229)
+- [ffmpeg-install-progress/route.ts:23-101](file://src/app/api/ffmpeg-install-progress/route.ts#L23-L101)
 
 ## 依赖关系分析
 
@@ -724,11 +812,13 @@ XML2JS[xml2js] --> Xiaoyuzhou[xiaoyuzhou.ts]
 FS[fs] --> WhisperConfig[whisper-config.ts]
 FS --> WhisperDownload[whisper-download/route.ts]
 FS --> WhisperInstall[whisper-install/route.ts]
+FS --> FfmpegInstall[ffmpeg-install/route.ts]
 FS --> TranscriptionHistory[transcription-history.ts]
 FS --> TranscriptionProgress[transcription-progress.ts]
 PATH[path] --> WhisperConfig
 PATH --> WhisperDownload
 PATH --> WhisperInstall
+PATH --> FfmpegInstall
 PATH --> TranscriptionHistory
 PATH --> TranscriptionProgress
 OS[os] --> ProcessPodcast[process-podcast/route.ts]
@@ -737,6 +827,7 @@ OS --> TranscriptionLive[transcription-live/route.ts]
 CHILD[child_process] --> ProcessPodcast
 CHILD --> WhisperInstall
 CHILD --> Retranscribe
+CHILD --> FfmpegInstall
 end
 subgraph "内部模块"
 ProcessPodcast --> Xiaoyuzhou
@@ -759,6 +850,8 @@ WhisperDownload --> WhisperConfig
 WhisperDownload --> Types
 WhisperInstall --> WhisperConfig
 WhisperInstall --> Types
+FfmpegInstall --> WhisperConfig
+FfmpegInstall --> Types
 WhisperStatus --> WhisperConfig
 WhisperStatus --> Types
 TranscriptionHistory --> TranscriptionHistoryState
@@ -771,6 +864,7 @@ subgraph "配置文件"
 ConfigFile[.whisper-config.json] --> WhisperConfig
 ProgressFile[.download-progress.json] --> WhisperDownload
 InstallProgress[.whisper-install-progress.json] --> WhisperInstall
+FfmpegProgress[.ffmpeg-install-progress.json] --> FfmpegInstall
 HistoryFile[.transcription-history.json] --> TranscriptionHistory
 TempDir[临时目录] --> ProcessPodcast
 TempDir --> Retranscribe
@@ -795,6 +889,7 @@ end
 - **进程管理**: Whisper 调用使用子进程避免阻塞主进程
 - **后台任务**: 所有长时间运行的任务都是异步执行
 - **实时流**: Server-Sent Events 使用高效的流式传输
+- **安装任务**: Whisper 和 FFmpeg 安装任务异步执行，不影响主流程
 
 ### 缓存策略
 
@@ -802,6 +897,7 @@ end
 - **进度缓存**: 下载进度文件定期更新，避免频繁磁盘写入
 - **临时文件**: 使用系统临时目录存储中间文件
 - **历史记录缓存**: 内存中缓存最近的转录记录
+- **安装进度缓存**: 进度文件作为缓存介质，实时更新状态
 
 ### 数据持久化
 
@@ -809,6 +905,7 @@ end
 - **进度文件**: 使用独立的进度文件跟踪实时状态
 - **状态同步**: 数据库和文件系统双重存储确保数据安全
 - **自动清理**: 进度文件在完成后自动清理
+- **安装进度清理**: 成功安装后自动清理进度文件
 
 ### 错误恢复
 
@@ -818,6 +915,7 @@ end
 - **状态持久化**: 进度状态持久化到文件系统
 - **重试机制**: 关键操作具备自动重试能力
 - **智能超时处理**（**更新**）：CPU-only 处理延长至 30 分钟，超时情况下优雅降级
+- **SSE 连接恢复**: 自动重连机制确保进度监控不中断
 
 ### 实时监控优化
 
@@ -825,6 +923,7 @@ end
 - **状态优先级**: 进度文件中的数据优先于数据库数据
 - **片段数量比较**: 优先选择片段数量较多的数据集
 - **自动关闭**: 完成或错误状态下自动关闭连接
+- **连接状态监控**: 实时监控客户端连接状态，支持自动重连
 
 ### 智能超时处理优化**（**更新**）
 
@@ -834,11 +933,20 @@ end
 - **片段保留策略**: 确保即使超时也能返回部分可用的转录结果
 - **错误输出截断**: 限制错误输出长度，避免内存溢出
 
+### 安装管理优化**（**更新**）
+
+- **并发安装**: Whisper 和 FFmpeg 安装任务可以独立进行
+- **进度实时监控**: 通过 SSE 实时推送安装进度
+- **错误状态报告**: 完善的错误状态和错误信息
+- **自动重连支持**: SSE 连接断开后自动重连
+- **状态同步**: 重新连接时立即同步当前安装状态
+
 **章节来源**
 - [process-podcast/route.ts:29-30](file://src/app/api/process-podcast/route.ts#L29-L30)
 - [process-podcast/route.ts:87-92](file://src/app/api/process-podcast/route.ts#L87-L92)
 - [retranscribe/route.ts:30](file://src/app/api/retranscribe/route.ts#L30)
 - [retranscribe/route.ts:78-83](file://src/app/api/retranscribe/route.ts#L78-L83)
+- [transcribe-progress/route.ts:46-139](file://src/app/api/transcribe-progress/route.ts#L46-L139)
 
 ## 故障排除指南
 
@@ -923,6 +1031,7 @@ end
 - 验证服务器端口可达性
 - 查看服务器端错误日志
 - 确认防火墙设置允许 SSE 连接
+- **更新**: 检查客户端是否支持自动重连机制
 
 #### 9. 实时进度合并问题
 
@@ -966,12 +1075,49 @@ end
 - 查看日志中是否显示 "使用已收集的片段完成处理" 警告
 - 检查是否有足够的磁盘空间
 
+#### 13. Whisper 安装失败**（**新增**）
+
+**症状**: `/api/whisper-install` 返回错误或安装进度卡住
+
+**解决方案**:
+- 检查网络连接和 GitHub 访问权限
+- 验证系统是否安装了必要的编译工具（cmake）
+- 查看 `/api/whisper-install-progress` 的详细错误信息
+- 确认有足够的磁盘空间进行编译
+- 检查系统架构是否支持 whisper.cpp 编译
+
+#### 14. FFmpeg 安装失败**（**新增**）
+
+**症状**: `/api/ffmpeg-install` 返回错误或安装进度卡住
+
+**解决方案**:
+- 检查 Homebrew 是否正确安装和配置
+- 验证系统权限是否允许安装软件包
+- 查看 `/api/ffmpeg-install-progress` 的详细错误信息
+- 确认系统满足 FFmpeg 的最低要求
+- 检查是否有其他软件包管理器冲突
+
+#### 15. 安装进度监控问题**（**新增**）
+
+**症状**: 安装进度 SSE 连接断开或无响应
+
+**解决方案**:
+- 检查客户端网络连接稳定性
+- 验证服务器端口可达性和防火墙设置
+- 查看服务器端错误日志
+- 确认进度文件存在且可读
+- **更新**: 检查客户端是否正确处理自动重连逻辑
+
 **章节来源**
 - [process-podcast/route.ts:370-423](file://src/app/api/process-podcast/route.ts#L370-L423)
 - [whisper-config/route.ts:40-96](file://src/app/api/whisper-config/route.ts#L40-L96)
 - [transcription-history/route.ts:15-24](file://src/app/api/transcription-history/route.ts#L15-L24)
 - [retranscribe/route.ts:313-390](file://src/app/api/retranscribe/route.ts#L313-L390)
 - [transcription-live/route.ts:36-118](file://src/app/api/transcription-live/route.ts#L36-L118)
+- [whisper-install/route.ts:179-220](file://src/app/api/whisper-install/route.ts#L179-L220)
+- [whisper-install-progress/route.ts:23-101](file://src/app/api/whisper-install-progress/route.ts#L23-L101)
+- [ffmpeg-install/route.ts:186-229](file://src/app/api/ffmpeg-install/route.ts#L186-L229)
+- [ffmpeg-install-progress/route.ts:23-101](file://src/app/api/ffmpeg-install-progress/route.ts#L23-L101)
 
 ## 结论
 
@@ -991,6 +1137,9 @@ MemoFlow 的核心 API 接口设计合理，实现了从播客 URL 提取到语�
 - 增强的数据持久化和状态同步
 - 优化的实时进度合并策略
 - **智能超时处理机制**：CPU-only 处理延长至 30 分钟，确保超时情况下返回已收集的片段而非完全失败
+- **新增 Whisper 安装管理**：完整的自动安装和进度监控
+- **新增 FFmpeg 安装管理**：系统化的媒体处理依赖管理
+- **改进的 SSE 进度监控**：支持自动重连和状态同步
 
 新增功能特性：
 - **转录历史管理**: 完整的 CRUD 操作支持
@@ -1001,6 +1150,9 @@ MemoFlow 的核心 API 接口设计合理，实现了从播客 URL 提取到语�
 - **智能合并**: 优化的进度数据合并策略
 - **错误恢复**: 增强的错误处理和恢复机制
 - **智能超时处理**（**更新**）：CPU-only 模式下延长超时时间，优雅降级处理
+- **Whisper 安装自动化**：完整的依赖管理和进度监控
+- **FFmpeg 安装自动化**：系统化的媒体处理工具管理
+- **SSE 连接恢复**：自动重连机制确保监控稳定性
 
 建议的改进方向：
 - 添加更多的音频格式支持
@@ -1013,3 +1165,5 @@ MemoFlow 的核心 API 接口设计合理，实现了从播客 URL 提取到语�
 - 优化实时监控的性能和稳定性
 - 增强数据备份和恢复机制
 - **进一步优化超时处理策略**，根据音频长度动态调整超时时间
+- **增强安装管理的容错能力**，支持更复杂的依赖关系处理
+- **完善 SSE 连接的健康检查机制**，提高系统稳定性
