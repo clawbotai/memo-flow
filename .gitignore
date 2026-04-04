@@ -35,8 +35,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Whisper设置
 .codepilot-uploads/
 .whisper.cpp
 whisper.cpp/
 models/
 transcripts/
+.whisper-config.json
