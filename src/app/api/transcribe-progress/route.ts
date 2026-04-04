@@ -46,6 +46,11 @@ export async function GET(request: Request) {
   const stream = new ReadableStream({
     start(controller) {
       let isClosed = false;
+      let intervalId: ReturnType<typeof setInterval> | null = null;
+
+      const handleAbort = () => {
+        closeConnection();
+      };
 
       const sendEvent = (data: object) => {
         if (isClosed) return;
@@ -61,19 +66,29 @@ export async function GET(request: Request) {
       const closeConnection = () => {
         if (isClosed) return;
         isClosed = true;
+
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+
+        request.signal.removeEventListener('abort', handleAbort);
+
         try {
           controller.close();
-        } catch (error) {
-          console.error('关闭 SSE 连接失败:', error);
+        } catch {
+          // controller 可能已经被框架关闭，直接忽略
         }
       };
+
+      request.signal.addEventListener('abort', handleAbort);
 
       // 立即发送当前状态
       const initialProgress = readProgress(taskId);
       if (initialProgress) {
         sendEvent(initialProgress);
         if (initialProgress.status === 'completed' || initialProgress.status === 'error') {
-          closeConnection();
+          setTimeout(closeConnection, 100);
           return;
         }
       } else {
@@ -81,9 +96,12 @@ export async function GET(request: Request) {
       }
 
       // 每秒轮询进度文件
-      const intervalId = setInterval(() => {
+      intervalId = setInterval(() => {
         if (isClosed) {
-          clearInterval(intervalId);
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
           return;
         }
 
@@ -97,13 +115,11 @@ export async function GET(request: Request) {
         sendEvent(progress);
 
         if (progress.status === 'completed' || progress.status === 'error') {
-          clearInterval(intervalId);
-          closeConnection();
+          setTimeout(closeConnection, 100);
         }
       }, 1000);
 
       cleanup = () => {
-        clearInterval(intervalId);
         closeConnection();
       };
     },
