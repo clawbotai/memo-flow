@@ -10,15 +10,18 @@ export interface WhisperConfig {
   modelName: string; // 'small' | 'medium'
   threads: number;
   outputDir: string;
+  ffmpegPath: string;
 }
 
 export interface WhisperStatus {
   whisperInstalled: boolean;
   modelInstalled: boolean;
+  ffmpegInstalled: boolean;
   whisperPath: string;
   modelPath: string;
   modelName: string;
   modelSize: string; // 文件大小的可读字符串，如 "462 MB"
+  ffmpegPath: string;
 }
 
 export interface TranscribeSegment {

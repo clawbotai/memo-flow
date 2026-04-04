@@ -37,5 +37,6 @@ next-env.d.ts
 
 .codepilot-uploads/
 .whisper.cpp
-.whisper.cpp/
-.models/
+whisper.cpp/
+models/
+transcripts/

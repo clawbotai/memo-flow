@@ -26,18 +26,18 @@ import { saveEpisodeTranscriptionFiles } from '@/lib/transcription-files';
 
 const execFileAsync = promisify(execFile);
 
-// 10 minutes timeout for whisper transcription
-const WHISPER_TIMEOUT_MS = 10 * 60 * 1000;
+// CPU 模式下延长至 30 分钟
+const WHISPER_TIMEOUT_MS = 30 * 60 * 1000;
 
 const TEMP_DIR = path.join(os.tmpdir(), 'memo-flow');
 
 /**
  * Convert audio to 16kHz mono WAV using ffmpeg
  */
-async function convertToWav(inputPath: string): Promise<string> {
+async function convertToWav(inputPath: string, ffmpegPath: string = 'ffmpeg'): Promise<string> {
   const wavPath = inputPath.replace(path.extname(inputPath), '.wav');
 
-  await execFileAsync('ffmpeg', [
+  await execFileAsync(ffmpegPath, [
     '-i', inputPath,
     '-ar', '16000',
     '-ac', '1',
@@ -52,18 +52,32 @@ async function convertToWav(inputPath: string): Promise<string> {
 /**
  * Run whisper via spawn, capturing segments in real-time
  */
+interface RunWhisperResult {
+  segments: TranscribeSegment[];
+  timedOut: boolean;
+}
+
 function runWhisperStreaming(
   whisperPath: string,
   args: string[],
   onSegment: (segment: TranscribeSegment) => void,
   onProgress: (percent: number) => void,
-): Promise<void> {
+): Promise<RunWhisperResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(whisperPath, args);
     const parser = createWhisperOutputParser({ onSegment, onProgress });
 
+    let errorOutput = '';
+    let isTimedOut = false;
+
     child.stderr.on('data', (data: Buffer) => {
-      parser.push(data.toString());
+      const text = data.toString();
+      errorOutput += text;
+      // 保持最多 2000 个字符
+      if (errorOutput.length > 2000) {
+        errorOutput = errorOutput.slice(-2000);
+      }
+      parser.push(text);
     });
 
     child.stdout.on('data', (data: Buffer) => {
@@ -71,17 +85,24 @@ function runWhisperStreaming(
     });
 
     const timeout = setTimeout(() => {
+      isTimedOut = true;
       child.kill('SIGTERM');
-      reject(new Error('whisper 转录超时（超过 10 分钟）'));
+      // 超时后使用已收集的片段作为兜底结果，而不是报错
+      console.warn('whisper 转录超时，使用已收集的片段完成处理');
     }, WHISPER_TIMEOUT_MS);
 
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       clearTimeout(timeout);
       parser.flush();
-      if (code === 0) {
-        resolve();
+      if (code === 0 || isTimedOut) {
+        // 正常完成或超时都返回结果（超时使用已收集的片段）
+        resolve({
+          segments: [], // 调用方会通过 onSegment 回调收集片段
+          timedOut: isTimedOut,
+        });
       } else {
-        reject(new Error(`whisper 进程退出，退出码: ${code}`));
+        const reason = code !== null ? `退出码: ${code}` : `信号: ${signal}`;
+        reject(new Error(`whisper 进程退出，${reason}\n错误输出: ${errorOutput.trim()}`));
       }
     });
 
@@ -192,10 +213,10 @@ async function processInBackground(taskId: string, url: string) {
       progress: 20,
     });
 
-    wavPath = await convertToWav(audioPath);
+    const config = resolveWhisperConfigPaths(getWhisperConfig());
+    wavPath = await convertToWav(audioPath, config.ffmpegPath);
 
     // Stage 4: 转录
-    const config = resolveWhisperConfigPaths(getWhisperConfig());
     const segments: TranscribeSegment[] = [];
     let lastWriteTime = 0;
     let currentProgress = 30;
@@ -243,7 +264,7 @@ async function processInBackground(taskId: string, url: string) {
       transcript: '',
     });
 
-    await runWhisperStreaming(
+    const { timedOut } = await runWhisperStreaming(
       config.whisperPath,
       [
         '-m', config.modelPath,
@@ -252,6 +273,7 @@ async function processInBackground(taskId: string, url: string) {
         '-t', config.threads.toString(),
         '--print-progress',
         '--output-srt',
+        '-ng', // 禁用 GPU，使用 CPU 运行以避免 Metal 内存问题
       ],
       (segment) => {
         segments.push(segment);
@@ -262,6 +284,11 @@ async function processInBackground(taskId: string, url: string) {
         flushLiveState();
       },
     );
+
+    if (timedOut) {
+      console.warn(`转录任务 ${taskId} 已超时，使用已收集的 ${segments.length} 个片段完成处理`);
+    }
+
     flushLiveState(true);
 
     // 读取最终转录文件

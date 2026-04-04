@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import { Inter, Lora } from "next/font/google";
+import { Lora } from "next/font/google";
 import "@/styles/globals.css";
 import { cn } from "@/lib/utils";
 import { AppShell } from "@/components/app-shell";
 import { ThemeProvider } from "@/components/theme-provider";
 
-const inter = Inter({ subsets: ["latin"] });
 const lora = Lora({ subsets: ["latin"], weight: ['400', '500', '600', '700'] });
 
 export const metadata: Metadata = {

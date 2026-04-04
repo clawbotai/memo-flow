@@ -4,14 +4,15 @@
 import { execFile } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import { isValidWhisperExecutable, getWhisperConfig, resolveWhisperConfigPaths } from './whisper-config';
 
-// whisper.cpp 可执行文件路径
-const WHISPER_PATH = process.env.WHISPER_PATH ||
-  path.join(process.cwd(), 'whisper.cpp/build/bin/whisper-cli');
-
-// 模型文件路径
-export const MODEL_PATH = process.env.WHISPER_MODEL_PATH ||
-  path.join(process.cwd(), 'models/ggml-medium.bin');
+/**
+ * 获取当前的 Whisper 配置
+ */
+function getCurrentConfig() {
+  const config = getWhisperConfig();
+  return resolveWhisperConfigPaths(config);
+}
 
 export interface TranscribeOptions {
   language?: string;      // 语言代码，默认 'zh' (中文)
@@ -33,17 +34,24 @@ export interface TranscribeSegment {
 }
 
 /**
- * 检查 whisper.cpp 是否已安装
+ * 检查 whisper.cpp 是否已安装并可运行
  */
 export function checkWhisperInstalled(): boolean {
-  return fs.existsSync(WHISPER_PATH);
+  try {
+    const config = getCurrentConfig();
+    return isValidWhisperExecutable(config.whisperPath);
+  } catch (error) {
+    console.error('验证 whisper 可执行文件失败:', error);
+    return false;
+  }
 }
 
 /**
  * 检查模型文件是否存在
  */
 export function checkModelExists(): boolean {
-  return fs.existsSync(MODEL_PATH);
+  const config = getCurrentConfig();
+  return fs.existsSync(config.modelPath);
 }
 
 /**
@@ -69,23 +77,25 @@ export async function transcribe(
   // 验证 whisper.cpp 已安装
   if (!checkWhisperInstalled()) {
     throw new Error(
-      'whisper.cpp 未安装，请运行：bash scripts/setup-whisper.sh'
+      'whisper.cpp 未安装，请先在设置中完成安装'
     );
   }
 
   // 验证模型存在
   if (!checkModelExists()) {
     throw new Error(
-      '模型文件不存在，请运行：bash scripts/download-model.sh'
+      '模型文件不存在，请在设置中下载模型'
     );
   }
 
+  const config = getCurrentConfig();
+
   // 构建命令参数
   const args = [
-    '-m', MODEL_PATH,
+    '-m', config.modelPath,
     '-f', audioPath,
     '-l', language,
-    '-t', process.env.WHISPER_THREADS || '4', // 使用线程数
+    '-t', config.threads.toString(), // 使用配置中的线程数
   ];
 
   // 如果需要 JSON 输出（带时间戳）
@@ -101,7 +111,8 @@ export async function transcribe(
   }
 
   return new Promise((resolve, reject) => {
-    execFile(WHISPER_PATH, args, (error, stdout, stderr) => {
+    // 运行命令
+    execFile(config.whisperPath, args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(`whisper 执行失败：${error.message}\n${stderr}`));
         return;
@@ -158,34 +169,63 @@ export async function transcribe(
 /**
  * 从 JSON 输出中提取纯文本
  */
-function extractTextFromJson(json: any): string {
-  if (json.transcription) {
-    return json.transcription.text || '';
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function extractTextFromJson(json: unknown): string {
+  if (!isRecord(json)) return '';
+
+  const transcription = json.transcription;
+  if (isRecord(transcription) && typeof transcription.text === 'string') {
+    return transcription.text;
   }
-  if (Array.isArray(json.segments)) {
-    return json.segments.map((s: any) => s.text).join(' ').trim();
+
+  const segments = json.segments;
+  if (Array.isArray(segments)) {
+    return segments
+      .map((s) => (isRecord(s) && typeof s.text === 'string' ? s.text : ''))
+      .filter(Boolean)
+      .join(' ')
+      .trim();
   }
+
   return '';
 }
 
 /**
  * 从 JSON 输出中提取分段信息
  */
-function extractSegmentsFromJson(json: any): TranscribeSegment[] {
-  if (json.transcription?.segments) {
-    return json.transcription.segments.map((s: any) => ({
-      start: s.start,
-      end: s.end,
-      text: s.text
-    }));
+function extractSegmentsFromJson(json: unknown): TranscribeSegment[] {
+  if (!isRecord(json)) return [];
+
+  const transcription = json.transcription;
+  if (isRecord(transcription) && Array.isArray(transcription.segments)) {
+    return transcription.segments
+      .map((s) => {
+        if (!isRecord(s)) return null;
+        const start = typeof s.start === 'number' ? s.start : 0;
+        const end = typeof s.end === 'number' ? s.end : 0;
+        const text = typeof s.text === 'string' ? s.text : '';
+        if (!text) return null;
+        return { start, end, text };
+      })
+      .filter((s): s is TranscribeSegment => s !== null);
   }
+
   if (Array.isArray(json.segments)) {
-    return json.segments.map((s: any) => ({
-      start: s.start,
-      end: s.end,
-      text: s.text
-    }));
+    return json.segments
+      .map((s) => {
+        if (!isRecord(s)) return null;
+        const start = typeof s.start === 'number' ? s.start : 0;
+        const end = typeof s.end === 'number' ? s.end : 0;
+        const text = typeof s.text === 'string' ? s.text : '';
+        if (!text) return null;
+        return { start, end, text };
+      })
+      .filter((s): s is TranscribeSegment => s !== null);
   }
+
   return [];
 }
 
@@ -208,21 +248,13 @@ function cleanupTempFiles(audioPath: string, outputExt: string) {
  * 快速转写（使用 small 模型，适合快速测试）
  */
 export async function transcribeFast(audioPath: string): Promise<TranscribeResult> {
-  const fastModelPath = path.join(process.cwd(), 'models/ggml-small.bin');
+  const fastModelPath = path.resolve(process.cwd(), 'models/ggml-small.bin');
 
   if (!fs.existsSync(fastModelPath)) {
-    // 如果 small 模型不存在，回退到默认模型
+    // 如果 small 模型不存在，使用当前配置的模型
     return transcribe(audioPath);
   }
 
-  // 临时修改 MODEL_PATH
-  const originalModelPath = MODEL_PATH;
-  try {
-    // @ts-ignore - 临时修改
-    global.MODEL_PATH = fastModelPath;
-    return await transcribe(audioPath, { language: 'zh' });
-  } finally {
-    // @ts-ignore
-    global.MODEL_PATH = originalModelPath;
-  }
+  // 临时使用 small 模型进行转录
+  return await transcribe(audioPath, { language: 'zh' });
 }

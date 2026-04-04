@@ -1,6 +1,5 @@
 // 小宇宙播客工具
 // 功能：从 episode URL 提取播客信息，包括音频链接和元数据
-import { parseStringPromise } from 'xml2js';
 
 export interface XiaoyuzhouEpisode {
   title: string;
@@ -194,25 +193,4 @@ async function fetchFromThirdPartyApi(episodeId: string): Promise<XiaoyuzhouEpis
     console.log('Third-party API failed:', error instanceof Error ? error.message : error);
     return null;
   }
-}
-
-/**
- * 解析时长字符串 (格式可能是 "HH:MM:SS" 或 "MM:SS" 或秒数)
- */
-function parseDuration(durationStr: string): number | undefined {
-  if (!durationStr) return undefined;
-
-  if (/^\d+$/.test(durationStr)) {
-    return parseInt(durationStr, 10);
-  }
-
-  const parts = durationStr.split(':').map(p => parseInt(p, 10));
-  if (parts.length === 2) {
-    return parts[0] * 60 + parts[1];
-  }
-  if (parts.length === 3) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  }
-
-  return undefined;
 }

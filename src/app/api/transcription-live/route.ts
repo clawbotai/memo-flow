@@ -51,9 +51,6 @@ export async function GET(request: NextRequest) {
 
   const stream = new ReadableStream({
     start(controller) {
-      // 提前声明，确保 close() 内可安全引用
-      let interval: ReturnType<typeof setInterval> | undefined;
-
       function send(data: unknown) {
         if (closed) return;
         try {
@@ -63,25 +60,19 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      function close() {
-        if (closed) return;
-        closed = true;
-        if (interval !== undefined) clearInterval(interval);
-        try { controller.close(); } catch { /* already closed */ }
-      }
-
       // 立即发送初始数据
       const mergedInitial = mergeProgressFile(initialRecord as unknown as Record<string, unknown>, id);
       send({ success: true, data: mergedInitial });
 
       // 如果已完成或出错，直接关闭（此时 interval 尚未赋值，但已安全声明）
       if (mergedInitial.status === 'completed' || mergedInitial.status === 'error') {
-        close();
+        closed = true;
+        try { controller.close(); } catch { /* already closed */ }
         return;
       }
 
       // 每 800ms 推送一次最新数据
-      interval = setInterval(async () => {
+      const interval = setInterval(async () => {
         try {
           const record = await getTranscriptionRecord(id);
           if (!record) {
@@ -101,6 +92,13 @@ export async function GET(request: NextRequest) {
           send({ success: false, error: '获取更新失败，正在自动重试' });
         }
       }, 800);
+
+      function close() {
+        if (closed) return;
+        closed = true;
+        clearInterval(interval);
+        try { controller.close(); } catch { /* already closed */ }
+      }
 
       // 客户端断开时清理
       request.signal.addEventListener('abort', () => close());

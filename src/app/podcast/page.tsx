@@ -13,13 +13,19 @@ import TranscriptionCard from '@/components/transcription-card';
 import { TranscriptionRecord } from '@/types/transcription-history';
 import type { TranscribeProgress, TranscribeSegment } from '@/types';
 
+type PodcastAudioInfo = {
+  audioUrl: string;
+  wordCount: number;
+  language: string;
+};
+
 export default function PodcastPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // 播客转录相关状态
   const [podcastUrl, setPodcastUrl] = useState('');
   const [podcastTranscript, setPodcastTranscript] = useState('');
-  const [podcastAudioInfo, setPodcastAudioInfo] = useState<any>(null);
+  const [podcastAudioInfo, setPodcastAudioInfo] = useState<PodcastAudioInfo | null>(null);
 
   // 实时转录状态
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -206,8 +212,9 @@ export default function PodcastPage() {
           }
 
           if (data.audioUrl) {
-            setPodcastAudioInfo((prev: any) => prev || {
-              audioUrl: data.audioUrl,
+            const audioUrl = data.audioUrl;
+            setPodcastAudioInfo((prev) => prev ?? {
+              audioUrl,
               wordCount: 0,
               language: 'zh',
             });
@@ -215,11 +222,11 @@ export default function PodcastPage() {
 
           if (data.status === 'completed') {
             setPodcastTranscript(data.transcript || '');
-            setPodcastAudioInfo({
-              audioUrl: data.audioUrl,
+            setPodcastAudioInfo((prev) => ({
+              audioUrl: data.audioUrl ?? prev?.audioUrl ?? '',
               wordCount: data.wordCount || 0,
               language: data.language || 'zh',
-            });
+            }));
             setFinalSegments(data.segments || []);
             if (data.savedPath) {
               setSavedPath(data.savedPath);

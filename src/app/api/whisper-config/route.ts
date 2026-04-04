@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
       modelName: String(body.modelName),
       threads: Number(body.threads),
       outputDir: body.outputDir ? String(body.outputDir) : currentConfig.outputDir,
+      ffmpegPath: body.ffmpegPath ? String(body.ffmpegPath) : currentConfig.ffmpegPath,
     };
 
     // 保存配置

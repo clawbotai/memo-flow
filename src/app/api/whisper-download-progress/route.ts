@@ -44,6 +44,7 @@ function readProgress(): {
  */
 export async function GET() {
   const encoder = new TextEncoder();
+  let cleanup: (() => void) | null = null;
 
   // 创建可读流
   const stream = new ReadableStream({
@@ -114,19 +115,14 @@ export async function GET() {
         }
       }, 1000);
 
-      // 处理客户端断开连接
-      const cleanup = () => {
-        if (!isClosed) {
-          clearInterval(intervalId);
-          closeConnection();
-        }
+      cleanup = () => {
+        clearInterval(intervalId);
+        closeConnection();
       };
-
-      // 监听取消信号
-      if (typeof (controller as any).signal !== 'undefined') {
-        (controller as any).signal.addEventListener('abort', cleanup);
-      }
-    }
+    },
+    cancel() {
+      cleanup?.();
+    },
   });
 
   // 返回 SSE 响应

@@ -41,6 +41,7 @@ export async function GET(request: Request) {
   }
 
   const encoder = new TextEncoder();
+  let cleanup: (() => void) | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
@@ -101,14 +102,13 @@ export async function GET(request: Request) {
         }
       }, 1000);
 
-      if (typeof (controller as any).signal !== 'undefined') {
-        (controller as any).signal.addEventListener('abort', () => {
-          if (!isClosed) {
-            clearInterval(intervalId);
-            closeConnection();
-          }
-        });
-      }
+      cleanup = () => {
+        clearInterval(intervalId);
+        closeConnection();
+      };
+    },
+    cancel() {
+      cleanup?.();
     },
   });
 

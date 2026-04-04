@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
-import { getWhisperConfig, formatFileSize, inferModelName, resolveWhisperConfigPaths } from '@/lib/whisper-config';
+import { isValidWhisperExecutable, getWhisperConfig, formatFileSize, inferModelName, resolveWhisperConfigPaths, isValidFfmpegExecutable } from '@/lib/whisper-config';
 import { WhisperStatus } from '@/types';
 
 /**
@@ -14,8 +14,8 @@ export async function GET() {
     const config = getWhisperConfig();
     const resolvedConfig = resolveWhisperConfigPaths(config);
 
-    // 检查 whisper.cpp 是否安装
-    const whisperInstalled = fs.existsSync(resolvedConfig.whisperPath);
+    // 检查 whisper.cpp 是否安装并可用
+    const whisperInstalled = isValidWhisperExecutable(resolvedConfig.whisperPath);
 
     // 检查模型文件是否存在
     const modelInstalled = fs.existsSync(resolvedConfig.modelPath);
@@ -34,11 +34,16 @@ export async function GET() {
     // 推断模型名称（从路径中）
     const modelName = inferModelName(resolvedConfig.modelPath);
 
+    // 检查 ffmpeg 是否安装
+    const ffmpegInstalled = isValidFfmpegExecutable(resolvedConfig.ffmpegPath);
+
     const status: WhisperStatus = {
       whisperInstalled,
       modelInstalled,
+      ffmpegInstalled,
       whisperPath: config.whisperPath,
       modelPath: config.modelPath,
+      ffmpegPath: config.ffmpegPath,
       modelName,
       modelSize,
     };

@@ -4,7 +4,6 @@ import {
   getTranscriptionRecord,
   deleteTranscriptionRecord,
 } from '@/lib/transcription-history';
-import type { TranscriptionRecord } from '@/types/transcription-history';
 
 export async function GET(request: NextRequest) {
   try {
