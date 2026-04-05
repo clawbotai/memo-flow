@@ -43,3 +43,24 @@ export interface TranscribeProgress {
   episodeTitle?: string;
   savedPath?: string;
 }
+
+// ─── 转录引擎相关类型 ───
+
+/** 转录引擎类型 */
+export type TranscriptionEngineType = 'local-whisper' | 'qwen-asr';
+
+/** 在线 ASR 模型配置 */
+export interface OnlineASRConfig {
+  provider: 'qwen';
+  modelName: string;       // e.g. 'qwen3-asr-flash'
+  apiKey: string;
+  baseUrl: string;         // DashScope API endpoint
+  enableITN: boolean;      // 逆文本正则化（数字/日期标准化）
+}
+
+/** 全局转录配置（前端 localStorage 存储） */
+export interface TranscriptionConfig {
+  activeEngine: TranscriptionEngineType;
+  whisper: WhisperConfig;
+  onlineASR: OnlineASRConfig;
+}

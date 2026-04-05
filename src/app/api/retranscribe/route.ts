@@ -10,7 +10,8 @@ import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
-import type { TranscribeSegment } from '@/types';
+import type { TranscribeSegment, TranscriptionEngineType, OnlineASRConfig, WhisperConfig } from '@/types';
+import { transcribeWithQwenASR } from '@/lib/qwen-asr';
 import {
   getTranscriptionRecord,
   updateTranscriptionRecord,
@@ -254,11 +255,18 @@ function runWhisperStreaming(
   });
 }
 
+interface RetranscribeEngineOptions {
+  engine: TranscriptionEngineType;
+  whisperConfig?: WhisperConfig;
+  onlineASRConfig?: OnlineASRConfig;
+}
+
 async function retranscribeInBackground(
   taskId: string,
   audioUrl: string,
   title: string,
   previousSavedPath?: string,
+  engineOptions?: RetranscribeEngineOptions,
 ) {
   registerTranscriptionTask(taskId);
 
@@ -267,6 +275,102 @@ async function retranscribeInBackground(
   let srtPath = '';
 
   try {
+    // ─── 引擎分流 ───
+    if (engineOptions?.engine === 'qwen-asr' && engineOptions.onlineASRConfig) {
+      // 在线千问 ASR 路径
+      writeTaskProgress(taskId, {
+        status: 'transcribing',
+        stage: '正在使用千问 ASR 在线转录...',
+        audioUrl,
+        episodeTitle: title,
+        segments: [],
+        transcript: '',
+        progress: 30,
+      });
+
+      await updateTaskRecord(taskId, {
+        status: 'transcribing',
+        progress: 30,
+        transcript: '',
+      });
+
+      let accumulatedText = '';
+      const abortController = new AbortController();
+      updateTranscriptionTask(taskId, {
+        status: 'transcribing',
+        fetchController: abortController,
+      });
+
+      const result = await transcribeWithQwenASR(
+        audioUrl,
+        engineOptions.onlineASRConfig,
+        {
+          onText: (text) => {
+            if (isTranscriptionTaskCancelled(taskId)) return;
+            accumulatedText += text;
+          },
+          onProgress: (percent) => {
+            if (isTranscriptionTaskCancelled(taskId)) return;
+            writeTaskProgress(taskId, {
+              status: 'transcribing',
+              stage: '正在使用千问 ASR 在线转录...',
+              audioUrl,
+              episodeTitle: title,
+              transcript: accumulatedText,
+              progress: 30 + Math.floor(percent * 0.6),
+            });
+          },
+        },
+        abortController.signal,
+      );
+
+      clearTranscriptionTaskResource(taskId, 'fetchController');
+      throwIfTranscriptionTaskCancelled(taskId);
+
+      if (result.cancelled) return;
+
+      const { segments: finalSegments, transcript } = result;
+
+      let savedPath = previousSavedPath ?? '';
+      try {
+        const outputDir = resolveTranscriptOutputDir(
+          engineOptions.whisperConfig?.outputDir || 'transcripts',
+          title,
+          previousSavedPath,
+        );
+        savedPath = await writeTranscriptTextFiles(outputDir, finalSegments, transcript);
+      } catch (error) {
+        console.error('重新转录写入逐字稿失败:', error);
+      }
+
+      throwIfTranscriptionTaskCancelled(taskId);
+
+      writeTaskProgress(taskId, {
+        status: 'completed',
+        stage: '转录完成',
+        audioUrl,
+        episodeTitle: title,
+        segments: finalSegments,
+        transcript,
+        wordCount: transcript.length,
+        language: 'zh',
+        progress: 100,
+        savedPath,
+      });
+
+      await updateTaskRecord(taskId, {
+        status: 'completed',
+        progress: 100,
+        transcript,
+        wordCount: transcript.length,
+        language: 'zh',
+        savedPath,
+        segments: finalSegments,
+      });
+      return;
+    }
+
+    // ─── 本地 Whisper 转录路径 ───
     writeTaskProgress(taskId, {
       status: 'downloading_audio',
       stage: '正在下载音频文件...',
@@ -323,7 +427,9 @@ async function retranscribeInBackground(
       progress: 20,
     });
 
-    const config = resolveWhisperConfigPaths(getWhisperConfig());
+    const config = engineOptions?.whisperConfig
+      ? resolveWhisperConfigPaths(engineOptions.whisperConfig)
+      : resolveWhisperConfigPaths(getWhisperConfig());
     wavPath = await convertToWav(audioPath, config.ffmpegPath, taskId);
     srtPath = `${wavPath}.srt`;
     updateTranscriptionTask(taskId, {
@@ -503,7 +609,8 @@ async function retranscribeInBackground(
 
 export async function POST(request: NextRequest) {
   try {
-    const { id } = await request.json();
+    const body = await request.json();
+    const { id, engine, whisperConfig: reqWhisperConfig, onlineASRConfig } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -527,18 +634,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const config = resolveWhisperConfigPaths(getWhisperConfig());
-    if (!isValidWhisperExecutable(config.whisperPath)) {
-      return NextResponse.json(
-        { success: false, error: 'whisper.cpp 未安装，请在设置中安装' },
-        { status: 400 },
-      );
-    }
-    if (!existsSync(config.modelPath)) {
-      return NextResponse.json(
-        { success: false, error: '模型文件不存在，请在设置中下载模型' },
-        { status: 400 },
-      );
+    const engineType: TranscriptionEngineType = engine || 'local-whisper';
+
+    // 引擎前置校验
+    if (engineType === 'qwen-asr') {
+      if (!onlineASRConfig?.apiKey) {
+        return NextResponse.json(
+          { success: false, error: '千问 ASR API Key 未配置，请在设置中填写' },
+          { status: 400 },
+        );
+      }
+    } else {
+      const config = reqWhisperConfig
+        ? resolveWhisperConfigPaths(reqWhisperConfig as WhisperConfig)
+        : resolveWhisperConfigPaths(getWhisperConfig());
+      if (!isValidWhisperExecutable(config.whisperPath)) {
+        return NextResponse.json(
+          { success: false, error: 'whisper.cpp 未安装，请在设置中安装' },
+          { status: 400 },
+        );
+      }
+      if (!existsSync(config.modelPath)) {
+        return NextResponse.json(
+          { success: false, error: '模型文件不存在，请在设置中下载模型' },
+          { status: 400 },
+        );
+      }
     }
 
     await updateTranscriptionRecord(id, {
@@ -552,13 +673,19 @@ export async function POST(request: NextRequest) {
 
     await mkdir(TEMP_DIR, { recursive: true });
     writeTranscribeProgress(id, {
-      status: 'downloading_audio',
+      status: engineType === 'qwen-asr' ? 'transcribing' : 'downloading_audio',
       stage: '准备重新转录...',
       audioUrl: record.audioUrl,
       episodeTitle: record.title,
     });
 
-    retranscribeInBackground(id, record.audioUrl, record.title, record.savedPath).catch((error) => {
+    const engineOptions: RetranscribeEngineOptions = {
+      engine: engineType,
+      whisperConfig: reqWhisperConfig as WhisperConfig | undefined,
+      onlineASRConfig: onlineASRConfig as OnlineASRConfig | undefined,
+    };
+
+    retranscribeInBackground(id, record.audioUrl, record.title, record.savedPath, engineOptions).catch((error) => {
       console.error('Unhandled retranscribe error:', error);
     });
 

@@ -11,7 +11,8 @@ import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
-import type { TranscribeSegment } from '@/types';
+import type { TranscribeSegment, TranscriptionEngineType, OnlineASRConfig, WhisperConfig } from '@/types';
+import { transcribeWithQwenASR } from '@/lib/qwen-asr';
 import {
   addTranscriptionRecord,
   updateTranscriptionRecord,
@@ -253,7 +254,148 @@ function runWhisperStreaming(
   });
 }
 
-async function processInBackground(taskId: string, url: string) {
+// ─── 在线千问 ASR 转录路径 ───
+
+async function processWithQwenASR(
+  taskId: string,
+  audioUrl: string,
+  episodeTitle: string,
+  asrConfig: OnlineASRConfig,
+  outputDir: string,
+  podcastUrl: string,
+) {
+  writeTaskProgress(taskId, {
+    status: 'transcribing',
+    stage: '正在使用千问 ASR 在线转录...',
+    audioUrl,
+    episodeTitle,
+    segments: [],
+    transcript: '',
+    progress: 30,
+  });
+
+  await updateTaskRecord(taskId, {
+    status: 'transcribing',
+    progress: 30,
+    transcript: '',
+  });
+
+  let accumulatedText = '';
+  let lastWriteTime = 0;
+
+  const flushOnlineState = (force = false) => {
+    if (isTranscriptionTaskCancelled(taskId)) return;
+    const now = Date.now();
+    if (!force && now - lastWriteTime < 500) return;
+    lastWriteTime = now;
+
+    writeTaskProgress(taskId, {
+      status: 'transcribing',
+      stage: '正在使用千问 ASR 在线转录...',
+      audioUrl,
+      episodeTitle,
+      transcript: accumulatedText,
+      progress: 50,
+    });
+  };
+
+  const abortController = new AbortController();
+  updateTranscriptionTask(taskId, {
+    status: 'transcribing',
+    fetchController: abortController,
+  });
+
+  const result = await transcribeWithQwenASR(
+    audioUrl,
+    asrConfig,
+    {
+      onText: (text) => {
+        if (isTranscriptionTaskCancelled(taskId)) return;
+        accumulatedText += text;
+        flushOnlineState();
+      },
+      onProgress: (percent) => {
+        if (isTranscriptionTaskCancelled(taskId)) return;
+        writeTaskProgress(taskId, {
+          status: 'transcribing',
+          stage: '正在使用千问 ASR 在线转录...',
+          audioUrl,
+          episodeTitle,
+          transcript: accumulatedText,
+          progress: 30 + Math.floor(percent * 0.6),
+        });
+      },
+      onError: (error) => {
+        console.error('千问 ASR 流式错误:', error);
+      },
+    },
+    abortController.signal,
+  );
+
+  clearTranscriptionTaskResource(taskId, 'fetchController');
+  throwIfTranscriptionTaskCancelled(taskId);
+
+  if (result.cancelled) {
+    return;
+  }
+
+  const { segments: finalSegments, transcript } = result;
+
+  // 保存转录文件
+  let savedPath = '';
+  try {
+    const resolvedOutputDir = resolveWhisperConfigPaths({
+      whisperPath: '', modelPath: '', modelName: '', threads: 1, ffmpegPath: '',
+      outputDir: outputDir || 'transcripts',
+    }).outputDir;
+
+    const episodeInfo = { title: episodeTitle, audioUrl };
+    savedPath = await saveEpisodeTranscriptionFiles(
+      resolvedOutputDir,
+      episodeInfo as Parameters<typeof saveEpisodeTranscriptionFiles>[1],
+      finalSegments,
+      transcript,
+      podcastUrl,
+    );
+  } catch (error) {
+    console.error('保存转录文件失败:', error);
+  }
+
+  throwIfTranscriptionTaskCancelled(taskId);
+
+  writeTaskProgress(taskId, {
+    status: 'completed',
+    stage: '转录完成',
+    audioUrl,
+    episodeTitle,
+    segments: finalSegments,
+    transcript,
+    wordCount: transcript.length,
+    language: 'zh',
+    progress: 100,
+    savedPath,
+  });
+
+  await updateTaskRecord(taskId, {
+    status: 'completed',
+    progress: 100,
+    transcript,
+    wordCount: transcript.length,
+    language: 'zh',
+    savedPath,
+    segments: finalSegments,
+  });
+}
+
+// ─── 主后台处理函数 ───
+
+interface EngineOptions {
+  engine: TranscriptionEngineType;
+  whisperConfig?: WhisperConfig;
+  onlineASRConfig?: OnlineASRConfig;
+}
+
+async function processInBackground(taskId: string, url: string, engineOptions: EngineOptions) {
   registerTranscriptionTask(taskId);
 
   let audioPath = '';
@@ -308,6 +450,22 @@ async function processInBackground(taskId: string, url: string) {
       audioUrl,
     });
     throwIfTranscriptionTaskCancelled(taskId);
+
+    // ─── 引擎分流 ───
+    if (engineOptions.engine === 'qwen-asr' && engineOptions.onlineASRConfig) {
+      // 在线千问 ASR：直接用音频 URL，无需下载和转换
+      await processWithQwenASR(
+        taskId,
+        audioUrl,
+        episodeInfo.title,
+        engineOptions.onlineASRConfig,
+        engineOptions.whisperConfig?.outputDir || 'transcripts',
+        url,
+      );
+      return;
+    }
+
+    // ─── 本地 Whisper 转录路径 ───
 
     writeTaskProgress(taskId, {
       status: 'downloading_audio',
@@ -369,7 +527,10 @@ async function processInBackground(taskId: string, url: string) {
       progress: 20,
     });
 
-    const config = resolveWhisperConfigPaths(getWhisperConfig());
+    // 使用传入的 whisper 配置，或回退到服务端配置文件
+    const config = engineOptions.whisperConfig
+      ? resolveWhisperConfigPaths(engineOptions.whisperConfig)
+      : resolveWhisperConfigPaths(getWhisperConfig());
     wavPath = await convertToWav(audioPath, config.ffmpegPath, taskId);
     srtPath = `${wavPath}.srt`;
     updateTranscriptionTask(taskId, {
@@ -556,7 +717,8 @@ async function processInBackground(taskId: string, url: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { url } = await request.json();
+    const body = await request.json();
+    const { url, engine, whisperConfig: reqWhisperConfig, onlineASRConfig } = body;
 
     if (!url) {
       return NextResponse.json(
@@ -565,20 +727,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const config = resolveWhisperConfigPaths(getWhisperConfig());
+    const engineType: TranscriptionEngineType = engine || 'local-whisper';
 
-    if (!isValidWhisperExecutable(config.whisperPath)) {
-      return NextResponse.json(
-        { success: false, error: 'whisper.cpp 未安装，请在设置中安装' },
-        { status: 400 },
-      );
-    }
+    // 引擎前置校验
+    if (engineType === 'qwen-asr') {
+      if (!onlineASRConfig?.apiKey) {
+        return NextResponse.json(
+          { success: false, error: '千问 ASR API Key 未配置，请在设置中填写' },
+          { status: 400 },
+        );
+      }
+    } else {
+      // 本地 Whisper 校验
+      const config = reqWhisperConfig
+        ? resolveWhisperConfigPaths(reqWhisperConfig as WhisperConfig)
+        : resolveWhisperConfigPaths(getWhisperConfig());
 
-    if (!existsSync(config.modelPath)) {
-      return NextResponse.json(
-        { success: false, error: '模型文件不存在，请在设置中下载模型' },
-        { status: 400 },
-      );
+      if (!isValidWhisperExecutable(config.whisperPath)) {
+        return NextResponse.json(
+          { success: false, error: 'whisper.cpp 未安装，请在设置中安装' },
+          { status: 400 },
+        );
+      }
+
+      if (!existsSync(config.modelPath)) {
+        return NextResponse.json(
+          { success: false, error: '模型文件不存在，请在设置中下载模型' },
+          { status: 400 },
+        );
+      }
     }
 
     const taskId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -589,7 +766,13 @@ export async function POST(request: NextRequest) {
       stage: '准备中...',
     });
 
-    processInBackground(taskId, url).catch((error) => {
+    const engineOptions: EngineOptions = {
+      engine: engineType,
+      whisperConfig: reqWhisperConfig as WhisperConfig | undefined,
+      onlineASRConfig: onlineASRConfig as OnlineASRConfig | undefined,
+    };
+
+    processInBackground(taskId, url, engineOptions).catch((error) => {
       console.error('Unhandled background error:', error);
     });
 

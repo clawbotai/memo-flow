@@ -5,12 +5,17 @@ import {
   Check,
   ChevronDown,
   Download,
+  Eye,
+  EyeOff,
+  Globe,
   Loader2,
+  Mic,
   Monitor,
   Moon,
   Settings,
   Sun,
   Terminal,
+  Zap,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -24,14 +29,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { WhisperConfig, WhisperStatus } from "@/types";
+import { WhisperConfig, WhisperStatus, TranscriptionEngineType, OnlineASRConfig } from "@/types";
+import { useTranscriptionConfig } from "@/hooks/use-transcription-config";
 
 interface WhisperSettingsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-type SettingsSection = "general" | "whisper";
+type SettingsSection = "general" | "transcription" | "whisper";
 
 interface DownloadProgress {
   status: "idle" | "downloading" | "completed" | "error";
@@ -59,6 +65,12 @@ const SETTINGS_SECTIONS: Array<{
     label: "通用",
     description: "主题外观",
     icon: <Settings className="h-4 w-4" />,
+  },
+  {
+    id: "transcription",
+    label: "转录",
+    description: "语音识别引擎",
+    icon: <Mic className="h-4 w-4" />,
   },
   {
     id: "whisper",
@@ -205,16 +217,10 @@ function WhisperPanel({
   visible: boolean;
   onClose: () => void;
 }) {
+  const { config: appConfig, updateWhisperConfig } = useTranscriptionConfig();
   const [status, setStatus] = React.useState<WhisperStatus | null>(null);
-  const [config, setConfig] = React.useState<WhisperConfig>({
-    whisperPath: "",
-    modelPath: "",
-    modelName: "small",
-    threads: 4,
-    outputDir: "",
-    ffmpegPath: "ffmpeg",
-  });
-  const [selectedModel, setSelectedModel] = React.useState<"small" | "medium">("small");
+  const [config, setConfig] = React.useState<WhisperConfig>(appConfig.whisper);
+  const [selectedModel, setSelectedModel] = React.useState<"small" | "medium">(appConfig.whisper.modelName as "small" | "medium");
   const [downloading, setDownloading] = React.useState(false);
   const [downloadProgress, setDownloadProgress] = React.useState<DownloadProgress | null>(null);
   const [installing, setInstalling] = React.useState(false);
@@ -235,13 +241,8 @@ function WhisperPanel({
     setLoading(true);
     setError(null);
     try {
-      const [statusRes, configRes] = await Promise.all([
-        fetch("/api/whisper-status"),
-        fetch("/api/whisper-config"),
-      ]);
-
+      const statusRes = await fetch("/api/whisper-status");
       const statusData = await statusRes.json();
-      const configData = await configRes.json();
 
       if (statusData.success) {
         setStatus(statusData.data);
@@ -253,17 +254,18 @@ function WhisperPanel({
         }
       }
 
-      if (configData.success) {
-        setConfig(configData.data);
-        setSelectedModel(configData.data.modelName as "small" | "medium");
+      // 从 localStorage 中同步配置状态
+      if (appConfig?.whisper) {
+        setConfig(appConfig.whisper);
+        setSelectedModel(appConfig.whisper.modelName as "small" | "medium");
       }
     } catch (err) {
-      setError("加载配置失败，请重试");
-      console.error("加载配置失败:", err);
+      setError("加载环境状态失败，请重试");
+      console.error("加载状态失败:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [appConfig]);
 
   React.useEffect(() => {
     if (open) {
@@ -505,18 +507,9 @@ function WhisperPanel({
     setError(null);
 
     try {
-      const res = await fetch("/api/whisper-config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "保存配置失败");
-      }
-
+      // 延迟一点以显示加载效果
+      await new Promise(resolve => setTimeout(resolve, 300));
+      updateWhisperConfig(config);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存配置失败");
@@ -961,6 +954,235 @@ function WhisperPanel({
   );
 }
 
+// ─── 转录引擎设置面板 ───
+
+const ENGINE_OPTIONS: Array<{
+  id: TranscriptionEngineType;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+}> = [
+  {
+    id: "local-whisper",
+    name: "本地 Whisper",
+    description: "使用本地 whisper.cpp 进行转录，无需网络",
+    icon: <Terminal className="h-4 w-4" />,
+  },
+  {
+    id: "qwen-asr",
+    name: "千问 ASR",
+    description: "使用阿里云千问 ASR 在线转录，速度快",
+    icon: <Globe className="h-4 w-4" />,
+  },
+];
+
+function TranscriptionEnginePanel({ visible }: { visible: boolean }) {
+  const { config, loaded, setActiveEngine, updateOnlineASRConfig } = useTranscriptionConfig();
+  const [showApiKey, setShowApiKey] = React.useState(false);
+  const [testing, setTesting] = React.useState(false);
+  const [testResult, setTestResult] = React.useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      // 直接在前端调用测试（通过代理避免 CORS）
+      const res = await fetch("/api/test-asr-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config.onlineASR),
+      });
+      const data = await res.json();
+      setTestResult(data);
+    } catch {
+      setTestResult({ success: false, message: "连接测试失败" });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (!loaded) {
+    return (
+      <section aria-hidden={!visible} className={cn("space-y-6", !visible && "hidden")}>
+        <div className="flex items-center justify-center py-14">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-hidden={!visible} className={cn("space-y-6", !visible && "hidden")}>
+      <div className="space-y-1">
+        <h3 className="text-lg font-semibold">转录引擎</h3>
+        <p className="text-sm text-muted-foreground">
+          选择语音识别引擎。本地 Whisper 无需网络但需要安装环境，在线模型只需 API Key。
+        </p>
+      </div>
+
+      {/* 引擎切换 */}
+      <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
+        <div className="space-y-4">
+          <h4 className="text-sm font-medium">选择引擎</h4>
+          <div className="grid gap-3">
+            {ENGINE_OPTIONS.map((engineOpt) => {
+              const selected = config.activeEngine === engineOpt.id;
+              return (
+                <button
+                  key={engineOpt.id}
+                  type="button"
+                  onClick={() => setActiveEngine(engineOpt.id)}
+                  className={cn(
+                    "relative flex items-center justify-between rounded-2xl border p-4 text-left transition-all",
+                    selected
+                      ? "border-primary bg-primary/8 shadow-sm shadow-primary/10"
+                      : "border-border/60 bg-background/80 hover:border-primary/35 hover:bg-accent/20"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        "mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border",
+                        selected
+                          ? "border-primary/30 bg-primary/12 text-primary"
+                          : "border-border/60 bg-card text-muted-foreground"
+                      )}
+                    >
+                      {engineOpt.icon}
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">{engineOpt.name}</div>
+                      <div className="mt-1 text-sm text-muted-foreground">{engineOpt.description}</div>
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      "flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors",
+                      selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
+                    )}
+                  >
+                    {selected && <Check className="h-3 w-3" />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 千问 ASR 配置 */}
+      {config.activeEngine === "qwen-asr" && (
+        <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary" />
+              <h4 className="text-sm font-medium">千问 ASR 配置</h4>
+            </div>
+
+            {/* API Key */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium">API Key</label>
+              <div className="relative">
+                <Input
+                  type={showApiKey ? "text" : "password"}
+                  value={config.onlineASR.apiKey}
+                  onChange={(e) => updateOnlineASRConfig({ apiKey: e.target.value })}
+                  placeholder="sk-..."
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                在 <a href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">阿里云百炼控制台</a> 获取 DashScope API Key。
+              </p>
+            </div>
+
+            {/* 模型选择 */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium">模型</label>
+              <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2.5">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">Qwen3-ASR-Flash</span>
+                <span className="ml-auto text-xs text-muted-foreground">快速识别</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                目前支持 Qwen3-ASR-Flash 模型，后续将支持更多模型。
+              </p>
+            </div>
+
+            {/* 连接测试 */}
+            <div className="flex items-center gap-3 border-t border-border/50 pt-4">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleTestConnection}
+                disabled={testing || !config.onlineASR.apiKey}
+              >
+                {testing ? (
+                  <>
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    测试中...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="mr-2 h-3.5 w-3.5" />
+                    测试连接
+                  </>
+                )}
+              </Button>
+              {testResult && (
+                <span
+                  className={cn(
+                    "text-xs",
+                    testResult.success ? "text-green-600 dark:text-green-400" : "text-destructive"
+                  )}
+                >
+                  {testResult.message}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 引擎状态 */}
+      <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">当前引擎</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "h-2.5 w-2.5 rounded-full",
+                config.activeEngine === "qwen-asr" && config.onlineASR.apiKey
+                  ? "bg-green-500"
+                  : config.activeEngine === "local-whisper"
+                    ? "bg-green-500"
+                    : "bg-amber-500"
+              )}
+            />
+            <span className="text-sm text-muted-foreground">
+              {config.activeEngine === "qwen-asr"
+                ? config.onlineASR.apiKey
+                  ? "千问 ASR · 已配置"
+                  : "千问 ASR · 未配置 API Key"
+                : "本地 Whisper"}
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
   const [activeSection, setActiveSection] = React.useState<SettingsSection>("general");
 
@@ -975,7 +1197,7 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
       <DialogContent className="w-[calc(100vw-1.5rem)] max-w-5xl gap-0 overflow-hidden p-0 sm:rounded-[1.5rem]">
         <DialogHeader className="border-b border-border/60 px-6 py-5">
           <DialogTitle>设置</DialogTitle>
-          <DialogDescription>管理应用偏好和本地语音转录环境。</DialogDescription>
+          <DialogDescription>管理应用偏好和语音转录环境。</DialogDescription>
         </DialogHeader>
 
         <div className="grid max-h-[78vh] min-h-[560px] grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)]">
@@ -1014,6 +1236,7 @@ export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
 
           <div className="min-h-0 overflow-y-auto bg-background px-4 py-5 sm:px-6 sm:py-6">
             <GeneralSettingsPanel visible={activeSection === "general"} />
+            <TranscriptionEnginePanel visible={activeSection === "transcription"} />
             <WhisperPanel
               open={open}
               visible={activeSection === "whisper"}

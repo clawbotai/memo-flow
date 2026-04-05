@@ -9,6 +9,7 @@ import { FlowLoader } from '@/components/ui/flow-loader';
 import { Copy, Check, ChevronDown, FileText, Clock } from 'lucide-react';
 import type { TranscribeSegment } from '@/types';
 import { TranscriptionRecord } from '@/types/transcription-history';
+import { useTranscriptionConfig } from '@/hooks/use-transcription-config';
 
 interface TranscriptionDetailProps {
   record: TranscriptionRecord;
@@ -43,6 +44,7 @@ function formatTimestamp(ts: string): string {
 }
 
 const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => {
+  const { config } = useTranscriptionConfig();
   const [liveRecord, setLiveRecord] = useState<TranscriptionRecord>(record);
   const [connected, setConnected] = useState(false);
   const [retranscribing, setRetranscribing] = useState(false);
@@ -116,7 +118,12 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
       const res = await fetch('/api/retranscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: record.id }),
+        body: JSON.stringify({ 
+          id: record.id,
+          engine: config.activeEngine,
+          whisperConfig: config.whisper,
+          onlineASRConfig: config.onlineASR,
+        }),
       });
       const result = await res.json();
       if (!result.success) {

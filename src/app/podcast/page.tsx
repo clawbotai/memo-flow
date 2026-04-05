@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import TranscriptionCard from '@/components/transcription-card';
 import { TranscriptionRecord } from '@/types/transcription-history';
 import type { TranscribeProgress, TranscribeSegment } from '@/types';
+import { useTranscriptionConfig } from '@/hooks/use-transcription-config';
 
 type PodcastAudioInfo = {
   audioUrl: string;
@@ -20,6 +21,7 @@ type PodcastAudioInfo = {
 };
 
 export default function PodcastPage() {
+  const { config } = useTranscriptionConfig();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // 播客转录相关状态
@@ -268,36 +270,43 @@ export default function PodcastPage() {
         return;
       }
 
-      // 检查 whisper 状态
-      const statusRes = await fetch('/api/whisper-status');
-      const statusData = await statusRes.json();
+      // 如果使用本地 Whisper 引擎，检查安装状态
+      if (config.activeEngine === 'local-whisper') {
+        const statusRes = await fetch('/api/whisper-status');
+        const statusData = await statusRes.json();
 
-      if (statusData.success) {
-        const { whisperInstalled, modelInstalled } = statusData.data;
+        if (statusData.success) {
+          const { whisperInstalled, modelInstalled } = statusData.data;
 
-        if (!whisperInstalled && !modelInstalled) {
-          setToast({ message: '请点击左侧导航栏中的「设置」安装 whisper.cpp 并下载模型', type: 'error' });
-          return;
-        }
+          if (!whisperInstalled && !modelInstalled) {
+            setToast({ message: '请点击左侧导航栏中的「设置」安装 whisper.cpp 并下载模型', type: 'error' });
+            return;
+          }
 
-        if (!whisperInstalled) {
-          setToast({ message: '请点击左侧导航栏中的「设置」安装 whisper.cpp', type: 'error' });
-          return;
-        }
+          if (!whisperInstalled) {
+            setToast({ message: '请点击左侧导航栏中的「设置」安装 whisper.cpp', type: 'error' });
+            return;
+          }
 
-        if (!modelInstalled) {
-          setToast({ message: '请点击左侧导航栏中的「设置」下载语音识别模型', type: 'error' });
-          return;
+          if (!modelInstalled) {
+            setToast({ message: '请点击左侧导航栏中的「设置」下载语音识别模型', type: 'error' });
+            return;
+          }
         }
       }
 
-      // 调用处理播客的API - 现在立即返回 taskId
+      // 调用处理播客的API
       const response = await fetch('/api/process-podcast', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url: podcastUrl }),
+        body: JSON.stringify({ 
+          url: podcastUrl,
+          engine: config.activeEngine,
+          whisperConfig: config.whisper,
+          onlineASRConfig: config.onlineASR,
+        }),
       });
 
       const result = await response.json();
