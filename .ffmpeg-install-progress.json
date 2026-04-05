@@ -1,0 +1,5 @@
+{
+  "status": "installing",
+  "step": "检测到 Homebrew 正在安装或残留锁，请稍候（或退出所有 brew 进程后重试）",
+  "error": "Homebrew 锁文件存在，可能是上一轮安装未正常结束导致。可尝试在终端执行：rm \"/usr/local/var/homebrew/locks/ffmpeg.formula.lock\""
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FlowLoader } from '@/components/ui/flow-loader';
@@ -12,6 +12,10 @@ import TranscriptionCard from '@/components/transcription-card';
 export default function Home() {
   const [recentRecords, setRecentRecords] = useState<TranscriptionRecord[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleRecordDeleted = useCallback((recordId: string) => {
+    setRecentRecords((prev) => prev.filter((record) => record.id !== recordId));
+  }, []);
 
   useEffect(() => {
     const loadRecent = async () => {
@@ -99,8 +103,8 @@ export default function Home() {
         <div className="space-y-8">
           {/* 欢迎区域 */}
           <div>
-            <h1 className="text-2xl font-semibold">欢迎使用 MemoFlow</h1>
-            <p className="text-muted-foreground mt-1">将播客内容转化为可检索、可管理的知识</p>
+            <h1 className="text-2xl font-semibold">欢迎使用 Linksy</h1>
+            <p className="text-muted-foreground mt-1">Turn any link into reusable knowledge</p>
           </div>
 
           {/* 功能入口卡片 */}
@@ -165,7 +169,11 @@ export default function Home() {
               ) : recentRecords.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {recentRecords.map((record) => (
-                    <TranscriptionCard key={record.id} record={record} />
+                    <TranscriptionCard
+                      key={record.id}
+                      record={record}
+                      onDeleted={handleRecordDeleted}
+                    />
                   ))}
                 </div>
               ) : (

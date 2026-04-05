@@ -8,12 +8,6 @@ interface FlowLoaderProps {
 }
 
 export function FlowLoader({ className, size = 'md' }: FlowLoaderProps) {
-  const sizes = {
-    sm: 'w-8 h-8',
-    md: 'w-16 h-16',
-    lg: 'w-24 h-24'
-  };
-
   const barSizes = {
     sm: 'w-1',
     md: 'w-1.5',

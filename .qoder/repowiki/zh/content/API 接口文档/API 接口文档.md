@@ -6,6 +6,8 @@
 - [src/app/api/whisper-config/route.ts](file://src/app/api/whisper-config/route.ts)
 - [src/app/api/whisper-download/route.ts](file://src/app/api/whisper-download/route.ts)
 - [src/app/api/whisper-download-progress/route.ts](file://src/app/api/whisper-download-progress/route.ts)
+- [src/app/api/whisper-install/route.ts](file://src/app/api/whisper-install/route.ts)
+- [src/app/api/whisper-install-progress/route.ts](file://src/app/api/whisper-install-progress/route.ts)
 - [src/app/api/whisper-status/route.ts](file://src/app/api/whisper-status/route.ts)
 - [src/lib/whisper-config.ts](file://src/lib/whisper-config.ts)
 - [src/lib/whisper.ts](file://src/lib/whisper.ts)
@@ -31,12 +33,16 @@
 ## 简介
 MemoFlow 是一个基于 AI 的内容分析与创作助手，支持从多平台（如小宇宙）粘贴链接，自动提取核心观点并生成笔记/二次创作内容。本文档聚焦于 MemoFlow 的 API 层，特别是播客处理与 Whisper 配置管理相关接口，提供完整的 RESTful API 接口规范、统一响应格式、错误码定义、状态码说明以及使用示例。
 
+**重要更新**：根据最新的代码变更，转录历史管理相关的 API（/api/transcription-history、/api/transcription-live、/api/retranscribe）已被移除。本文档已相应更新以反映这一变更。
+
 ## 项目结构
 MemoFlow 的 API 路由位于 `src/app/api/` 目录下，按功能模块划分：
 - `/process-podcast`: 播客处理与转录
 - `/whisper-config`: Whisper 配置读取与更新
 - `/whisper-download`: 模型下载触发
 - `/whisper-download-progress`: 模型下载进度（SSE）
+- `/whisper-install`: Whisper 安装触发
+- `/whisper-install-progress`: Whisper 安装进度（SSE）
 - `/whisper-status`: Whisper 状态查询
 
 ```mermaid
@@ -46,6 +52,8 @@ PP["/process-podcast<br/>POST"]
 WC["/whisper-config<br/>GET/POST"]
 WD["/whisper-download<br/>POST"]
 WDP["/whisper-download-progress<br/>GET(SSE)"]
+WI["/whisper-install<br/>POST"]
+WIP["/whisper-install-progress<br/>GET(SSE)"]
 WS["/whisper-status<br/>GET"]
 end
 subgraph "业务逻辑"
@@ -57,6 +65,7 @@ subgraph "存储"
 CFG[".whisper-config.json<br/>配置文件"]
 MODELS["models/<model>.bin<br/>模型文件"]
 PROG[".download-progress.json<br/>下载进度文件"]
+INSTALL[".install-progress.json<br/>安装进度文件"]
 end
 PP --> XZ
 PP --> WCONF
@@ -65,6 +74,8 @@ WC --> WCONF
 WD --> WCONF
 WD --> PROG
 WDP --> PROG
+WI --> INSTALL
+WIP --> INSTALL
 WS --> WCONF
 WCONF --> CFG
 WD --> MODELS
@@ -75,6 +86,8 @@ WD --> MODELS
 - [src/app/api/whisper-config/route.ts](file://src/app/api/whisper-config/route.ts)
 - [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-139](file://src/app/api/whisper-download-progress/route.ts#L1-L139)
+- [src/app/api/whisper-install/route.ts:1-200](file://src/app/api/whisper-install/route.ts#L1-L200)
+- [src/app/api/whisper-install-progress/route.ts:1-139](file://src/app/api/whisper-install-progress/route.ts#L1-L139)
 - [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
 - [src/lib/whisper-config.ts:1-105](file://src/lib/whisper-config.ts#L1-L105)
 - [src/lib/whisper.ts:1-229](file://src/lib/whisper.ts#L1-L229)
@@ -85,6 +98,8 @@ WD --> MODELS
 - [src/app/api/whisper-config/route.ts](file://src/app/api/whisper-config/route.ts)
 - [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-139](file://src/app/api/whisper-download-progress/route.ts#L1-L139)
+- [src/app/api/whisper-install/route.ts:1-200](file://src/app/api/whisper-install/route.ts#L1-L200)
+- [src/app/api/whisper-install-progress/route.ts:1-139](file://src/app/api/whisper-install-progress/route.ts#L1-L139)
 - [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
 
 ## 核心组件
@@ -92,6 +107,7 @@ WD --> MODELS
 - 数据模型：通过 TypeScript 类型定义了 `ApiResponse<T>`、`WhisperConfig`、`WhisperStatus` 等核心数据结构，确保前后端契约一致。
 - 配置管理：Whisper 配置支持文件持久化与环境变量覆盖，提供灵活的部署能力。
 - 下载进度：模型下载采用后台异步执行，并通过 SSE 实时推送进度，提升用户体验。
+- 安装管理：Whisper 安装过程同样支持进度追踪，确保用户能够实时了解安装状态。
 
 **章节来源**
 - [src/types/index.ts:1-22](file://src/types/index.ts#L1-L22)
@@ -295,6 +311,53 @@ end
 **章节来源**
 - [src/app/api/whisper-download-progress/route.ts:43-138](file://src/app/api/whisper-download-progress/route.ts#L43-L138)
 
+### Whisper 安装接口
+- 端点：`POST /api/whisper-install`
+- 请求体：空
+- 功能：启动 Whisper 安装流程，立即返回安装开始信息
+- 成功响应：`{ success: true, message: "Installation started" }`
+- 失败响应：`{ success: false, error: string }`
+- 并发控制：若安装已在进行中，返回 409 冲突
+- 后台执行：安装完成后更新状态文件
+
+```mermaid
+flowchart TD
+Start(["接收安装请求"]) --> CheckInstall["检查是否已有安装进程"]
+CheckInstall --> |正在安装| Conflict["返回 409 冲突"]
+CheckInstall --> |未在安装| Init["初始化安装状态"]
+Init --> StartProc["启动安装进程"]
+StartProc --> WriteStatus["写入初始状态"]
+WriteStatus --> Loop["循环监控安装进度"]
+Loop --> Update["更新状态文件"]
+Update --> CheckComplete{"安装完成?"}
+CheckComplete --> |否| Loop
+CheckComplete --> |是| Finish["标记安装完成"]
+Finish --> Done(["返回成功响应"])
+```
+
+**图表来源**
+- [src/app/api/whisper-install/route.ts:120-200](file://src/app/api/whisper-install/route.ts#L120-L200)
+
+**章节来源**
+- [src/app/api/whisper-install/route.ts:120-200](file://src/app/api/whisper-install/route.ts#L120-L200)
+
+### 安装进度接口（SSE）
+- 端点：`GET /api/whisper-install-progress`
+- 协议：Server-Sent Events (SSE)
+- 功能：实时推送 Whisper 安装进度
+- 响应字段：
+  - `status`: idle/installing/completed/error
+  - `stage`: 当前阶段描述
+  - `progress`: 进度百分比
+  - `error`: 错误信息（当状态为 error 时）
+- 客户端行为：
+  - 立即推送当前安装状态
+  - 每秒轮询状态文件并推送
+  - 安装完成后保持连接一段时间再关闭
+
+**章节来源**
+- [src/app/api/whisper-install-progress/route.ts:43-138](file://src/app/api/whisper-install-progress/route.ts#L43-L138)
+
 ### Whisper 状态接口
 - 端点：`GET /api/whisper-status`
 - 功能：查询 whisper.cpp 安装状态、模型文件存在性、模型大小与模型名称
@@ -324,6 +387,7 @@ class WhisperStatus {
 - 组件耦合：
   - 播客处理 API 依赖小宇宙工具、配置管理与转录封装
   - 下载进度依赖进度文件，与下载 API 强关联
+  - 安装进度依赖状态文件，与安装 API 强关联
   - 状态接口依赖配置管理与文件系统
 - 外部依赖：
   - 小宇宙官方 API、第三方 API、Hugging Face 镜像源
@@ -338,6 +402,8 @@ PP --> WTTS["whisper.ts"]
 WD["whisper-download"] --> WConf
 WD --> Prog[".download-progress.json"]
 WDP["whisper-download-progress"] --> Prog
+WI["whisper-install"] --> Install[".install-progress.json"]
+WIP["whisper-install-progress"] --> Install
 WS["whisper-status"] --> WConf
 ```
 
@@ -345,6 +411,8 @@ WS["whisper-status"] --> WConf
 - [src/app/api/process-podcast/route.ts:1-127](file://src/app/api/process-podcast/route.ts#L1-L127)
 - [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-139](file://src/app/api/whisper-download-progress/route.ts#L1-L139)
+- [src/app/api/whisper-install/route.ts:1-200](file://src/app/api/whisper-install/route.ts#L1-L200)
+- [src/app/api/whisper-install-progress/route.ts:1-139](file://src/app/api/whisper-install-progress/route.ts#L1-L139)
 - [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
 - [src/lib/whisper-config.ts:1-105](file://src/lib/whisper-config.ts#L1-L105)
 - [src/lib/whisper.ts:1-229](file://src/lib/whisper.ts#L1-L229)
@@ -354,6 +422,8 @@ WS["whisper-status"] --> WConf
 - [src/app/api/process-podcast/route.ts:1-127](file://src/app/api/process-podcast/route.ts#L1-L127)
 - [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-139](file://src/app/api/whisper-download-progress/route.ts#L1-L139)
+- [src/app/api/whisper-install/route.ts:1-200](file://src/app/api/whisper-install/route.ts#L1-L200)
+- [src/app/api/whisper-install-progress/route.ts:1-139](file://src/app/api/whisper-install-progress/route.ts#L1-L139)
 - [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
 - [src/lib/whisper-config.ts:1-105](file://src/lib/whisper-config.ts#L1-L105)
 - [src/lib/whisper.ts:1-229](file://src/lib/whisper.ts#L1-L229)
@@ -363,6 +433,9 @@ WS["whisper-status"] --> WConf
 - 模型下载：
   - 使用流式读取与定期进度更新，避免频繁磁盘写入
   - 支持并发下载控制，防止重复下载
+- Whisper 安装：
+  - 后台异步安装，避免阻塞主进程
+  - 进度文件定期更新，确保状态一致性
 - 转录性能：
   - 通过环境变量 `WHISPER_THREADS` 控制线程数
   - 建议设置为 CPU 核心数的一半以平衡吞吐与资源占用
@@ -370,28 +443,28 @@ WS["whisper-status"] --> WConf
   - 临时文件清理及时，减少磁盘占用
   - SSE 进度推送间隔为 1 秒，兼顾实时性与性能
 
-[本节为通用性能建议，无需特定文件来源]
-
 ## 故障排除指南
 - 常见错误码与原因：
-  - 400：缺少必要参数（如 URL）、无法获取音频 URL
-  - 409：同名模型正在下载中
-  - 500：服务器内部错误（网络异常、文件读写失败、转录执行失败）
+  - 400：缺少必要参数（如 URL）、无法获取音频 URL、配置无效
+  - 409：同名模型正在下载中、安装进程已在进行中
+  - 500：服务器内部错误（网络异常、文件读写失败、转录执行失败、安装失败）
 - 典型问题排查：
   - whisper.cpp 未安装：检查 `WHISPER_PATH` 是否正确，参考安装脚本
   - 模型文件缺失：确认 `modelName` 与 `modelPath` 匹配，或通过下载接口重新下载
+  - 安装失败：检查安装日志，确认系统满足 Whisper 安装要求
   - 下载中断：查看进度文件是否存在，清理后重新发起下载
   - 转录失败：检查 whisper.cpp 可执行权限与模型完整性
 
 **章节来源**
 - [src/app/api/process-podcast/route.ts:17-22](file://src/app/api/process-podcast/route.ts#L17-L22)
 - [src/app/api/whisper-download/route.ts:186-199](file://src/app/api/whisper-download/route.ts#L186-L199)
+- [src/app/api/whisper-install/route.ts:150-170](file://src/app/api/whisper-install/route.ts#L150-L170)
 - [src/app/api/whisper-status/route.ts:49-58](file://src/app/api/whisper-status/route.ts#L49-L58)
 
 ## 结论
-MemoFlow 的 API 设计遵循 RESTful 原则，统一响应格式与清晰的错误处理提升了集成体验。播客处理流程从链接验证到转录结果返回完整闭环，Whisper 配置管理与模型下载接口提供了灵活的本地部署方案。通过 SSE 实时进度反馈与完善的错误处理，前端与第三方集成可以稳定地使用这些接口。
+MemoFlow 的 API 设计遵循 RESTful 原则，统一响应格式与清晰的错误处理提升了集成体验。播客处理流程从链接验证到转录结果返回完整闭环，Whisper 配置管理、模型下载与安装接口提供了灵活的本地部署方案。通过 SSE 实时进度反馈与完善的错误处理，前端与第三方集成可以稳定地使用这些接口。
 
-[本节为总结性内容，无需特定文件来源]
+**重要说明**：转录历史管理相关的 API（/api/transcription-history、/api/transcription-live、/api/retranscribe）已从当前版本中移除，相关的前端组件也已更新以适配新的架构。
 
 ## 附录
 
@@ -405,12 +478,13 @@ MemoFlow 的 API 设计遵循 RESTful 原则，统一响应格式与清晰的错
 
 ### 错误码与状态码说明
 - 400：请求参数无效或业务逻辑错误
-- 409：资源冲突（如模型正在下载）
+- 409：资源冲突（如模型正在下载、安装进程已在进行中）
 - 500：服务器内部错误
 
 **章节来源**
 - [src/app/api/process-podcast/route.ts:17-22](file://src/app/api/process-podcast/route.ts#L17-L22)
 - [src/app/api/whisper-download/route.ts:186-199](file://src/app/api/whisper-download/route.ts#L186-L199)
+- [src/app/api/whisper-install/route.ts:150-170](file://src/app/api/whisper-install/route.ts#L150-L170)
 
 ### API 使用示例
 - 获取播客转录：
@@ -420,6 +494,9 @@ MemoFlow 的 API 设计遵循 RESTful 原则，统一响应格式与清晰的错
 - 下载模型并追踪进度：
   - POST `/api/whisper-download`：`{ "modelName": "small" }`
   - GET `/api/whisper-download-progress`：SSE 流
+- 安装 Whisper 并追踪进度：
+  - POST `/api/whisper-install`：空请求体
+  - GET `/api/whisper-install-progress`：SSE 流
 - 查询状态：
   - GET `/api/whisper-status`：返回安装状态与模型信息
 
@@ -431,8 +508,6 @@ MemoFlow 的 API 设计遵循 RESTful 原则，统一响应格式与清晰的错
 ### 认证方法与安全考虑
 - 认证：当前 API 未实现鉴权机制，建议在生产环境中增加鉴权层（如 JWT、API Key）
 - 安全：限制请求体大小、对输入 URL 进行白名单校验、对临时文件与模型文件设置最小权限
-
-[本节为通用安全建议，无需特定文件来源]
 
 ### 部署与环境变量
 - 环境变量：

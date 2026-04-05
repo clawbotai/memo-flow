@@ -13,13 +13,19 @@ import TranscriptionCard from '@/components/transcription-card';
 import { TranscriptionRecord } from '@/types/transcription-history';
 import type { TranscribeProgress, TranscribeSegment } from '@/types';
 
+type PodcastAudioInfo = {
+  audioUrl: string;
+  wordCount: number;
+  language: string;
+};
+
 export default function PodcastPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // 播客转录相关状态
   const [podcastUrl, setPodcastUrl] = useState('');
   const [podcastTranscript, setPodcastTranscript] = useState('');
-  const [podcastAudioInfo, setPodcastAudioInfo] = useState<any>(null);
+  const [podcastAudioInfo, setPodcastAudioInfo] = useState<PodcastAudioInfo | null>(null);
 
   // 实时转录状态
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -36,6 +42,9 @@ export default function PodcastPage() {
   const [historyLoading, setHistoryLoading] = useState(true);
 
   const transcribeEsRef = useRef<EventSource | null>(null);
+  const transcribeReconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeTaskIdRef = useRef<string | null>(null);
+  const transcribeFinishedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isLoading = taskId !== null;
@@ -103,20 +112,139 @@ export default function PodcastPage() {
     }
   }, [liveSegments]);
 
-  // 清理 EventSource
-  useEffect(() => {
-    return () => {
-      transcribeEsRef.current?.close();
-    };
+  const clearReconnectTimer = useCallback(() => {
+    if (transcribeReconnectTimeoutRef.current) {
+      clearTimeout(transcribeReconnectTimeoutRef.current);
+      transcribeReconnectTimeoutRef.current = null;
+    }
   }, []);
 
   const closeEventSource = useCallback(() => {
+    clearReconnectTimer();
     transcribeEsRef.current?.close();
     transcribeEsRef.current = null;
-  }, []);
+  }, [clearReconnectTimer]);
+
+  const resetActiveTaskState = useCallback(() => {
+    transcribeFinishedRef.current = true;
+    activeTaskIdRef.current = null;
+    closeEventSource();
+    setTaskId(null);
+    setPodcastTranscript('');
+    setPodcastAudioInfo(null);
+    setLiveSegments([]);
+    setTranscribeProgress(null);
+    setTranscribeStage('');
+    setTranscribeStatus('');
+    setEpisodeTitle('');
+    setSavedPath('');
+    setFinalSegments([]);
+  }, [closeEventSource]);
+
+  const connectToTranscribeProgress = useCallback((currentTaskId: string) => {
+    clearReconnectTimer();
+    transcribeEsRef.current?.close();
+
+    const es = new EventSource(`/api/transcribe-progress?taskId=${currentTaskId}`);
+    transcribeEsRef.current = es;
+
+    es.onopen = () => {
+      clearReconnectTimer();
+    };
+
+    es.onmessage = (event) => {
+      try {
+        const data: TranscribeProgress = JSON.parse(event.data);
+
+        if (activeTaskIdRef.current !== currentTaskId) {
+          return;
+        }
+
+        setTranscribeStage(data.stage);
+        setTranscribeStatus(data.status);
+
+        if (data.episodeTitle) {
+          setEpisodeTitle(data.episodeTitle);
+        }
+
+        if (data.segments && data.segments.length > 0) {
+          setLiveSegments(data.segments);
+        }
+
+        if (data.progress !== undefined && data.progress !== null) {
+          setTranscribeProgress(data.progress);
+        }
+
+        if (data.audioUrl) {
+          const audioUrl = data.audioUrl;
+          setPodcastAudioInfo((prev) => prev ?? {
+            audioUrl,
+            wordCount: 0,
+            language: 'zh',
+          });
+        }
+
+        if (data.status === 'completed') {
+          transcribeFinishedRef.current = true;
+          activeTaskIdRef.current = null;
+          setPodcastTranscript(data.transcript || '');
+          setPodcastAudioInfo((prev) => ({
+            audioUrl: data.audioUrl ?? prev?.audioUrl ?? '',
+            wordCount: data.wordCount || 0,
+            language: data.language || 'zh',
+          }));
+          setFinalSegments(data.segments || []);
+          if (data.savedPath) {
+            setSavedPath(data.savedPath);
+          }
+          setTaskId(null);
+          setTranscribeProgress(null);
+          closeEventSource();
+          setToast({ message: '转录成功！', type: 'success' });
+        } else if (data.status === 'error') {
+          transcribeFinishedRef.current = true;
+          activeTaskIdRef.current = null;
+          setTaskId(null);
+          setTranscribeProgress(null);
+          closeEventSource();
+          setToast({ message: data.error || '转录失败，请重试', type: 'error' });
+        }
+      } catch (err) {
+        console.error('解析转录进度数据失败:', err);
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+
+      if (transcribeEsRef.current === es) {
+        transcribeEsRef.current = null;
+      }
+
+      if (transcribeFinishedRef.current || activeTaskIdRef.current !== currentTaskId) {
+        return;
+      }
+
+      clearReconnectTimer();
+      transcribeReconnectTimeoutRef.current = setTimeout(() => {
+        if (!transcribeFinishedRef.current && activeTaskIdRef.current === currentTaskId) {
+          connectToTranscribeProgress(currentTaskId);
+        }
+      }, 3000);
+    };
+  }, [clearReconnectTimer, closeEventSource]);
+
+  // 清理 EventSource
+  useEffect(() => {
+    return () => {
+      transcribeFinishedRef.current = true;
+      activeTaskIdRef.current = null;
+      closeEventSource();
+    };
+  }, [closeEventSource]);
 
   // 处理播客转录
-  const handlePodcastTranscribe = async (e: React.FormEvent) => {
+  const handlePodcastTranscribe = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!podcastUrl.trim() || isLoading) return;
 
@@ -129,6 +257,9 @@ export default function PodcastPage() {
     setEpisodeTitle('');
     setSavedPath('');
     setFinalSegments([]);
+    transcribeFinishedRef.current = false;
+    activeTaskIdRef.current = null;
+    closeEventSource();
 
     try {
       // 检查是否为小宇宙链接
@@ -177,80 +308,32 @@ export default function PodcastPage() {
       }
 
       const newTaskId = result.data.taskId;
+      transcribeFinishedRef.current = false;
+      activeTaskIdRef.current = newTaskId;
       setTaskId(newTaskId);
       setTranscribeStage('准备中...');
       setTranscribeStatus('idle');
 
       // 打开 SSE 连接监听转录进度
-      closeEventSource();
-      const es = new EventSource(`/api/transcribe-progress?taskId=${newTaskId}`);
-      transcribeEsRef.current = es;
-
-      es.onmessage = (event) => {
-        try {
-          const data: TranscribeProgress = JSON.parse(event.data);
-
-          setTranscribeStage(data.stage);
-          setTranscribeStatus(data.status);
-
-          if (data.episodeTitle) {
-            setEpisodeTitle(data.episodeTitle);
-          }
-
-          if (data.segments && data.segments.length > 0) {
-            setLiveSegments(data.segments);
-          }
-
-          if (data.progress !== undefined && data.progress !== null) {
-            setTranscribeProgress(data.progress);
-          }
-
-          if (data.audioUrl) {
-            setPodcastAudioInfo((prev: any) => prev || {
-              audioUrl: data.audioUrl,
-              wordCount: 0,
-              language: 'zh',
-            });
-          }
-
-          if (data.status === 'completed') {
-            setPodcastTranscript(data.transcript || '');
-            setPodcastAudioInfo({
-              audioUrl: data.audioUrl,
-              wordCount: data.wordCount || 0,
-              language: data.language || 'zh',
-            });
-            setFinalSegments(data.segments || []);
-            if (data.savedPath) {
-              setSavedPath(data.savedPath);
-            }
-            setTaskId(null);
-            setTranscribeProgress(null);
-            closeEventSource();
-            setToast({ message: '转录成功！', type: 'success' });
-          } else if (data.status === 'error') {
-            setTaskId(null);
-            setTranscribeProgress(null);
-            closeEventSource();
-            setToast({ message: data.error || '转录失败，请重试', type: 'error' });
-          }
-        } catch (err) {
-          console.error('解析转录进度数据失败:', err);
-        }
-      };
-
-      es.onerror = () => {
-        closeEventSource();
-        setTaskId(null);
-        setTranscribeProgress(null);
-        setToast({ message: '转录进度连接中断', type: 'error' });
-      };
+      connectToTranscribeProgress(newTaskId);
     } catch (error) {
       console.error('Podcast transcription error:', error);
+      transcribeFinishedRef.current = true;
+      activeTaskIdRef.current = null;
+      closeEventSource();
       setTaskId(null);
       setToast({ message: '网络错误，请检查连接', type: 'error' });
     }
-  };
+  }, [closeEventSource, connectToTranscribeProgress, isLoading, podcastUrl]);
+
+  const handleRecordDeleted = useCallback((recordId: string) => {
+    setTranscriptionHistory((prev) => prev.filter((record) => record.id !== recordId));
+
+    if (taskId === recordId || activeTaskIdRef.current === recordId) {
+      resetActiveTaskState();
+      setToast({ message: '转录任务已删除', type: 'info' });
+    }
+  }, [resetActiveTaskState, taskId]);
 
   const getButtonLabel = () => {
     if (!isLoading) return '开始转录';
@@ -506,7 +589,11 @@ export default function PodcastPage() {
               ) : transcriptionHistory.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {transcriptionHistory.map((record) => (
-                    <TranscriptionCard key={record.id} record={record} />
+                    <TranscriptionCard
+                      key={record.id}
+                      record={record}
+                      onDeleted={handleRecordDeleted}
+                    />
                   ))}
                 </div>
               ) : (

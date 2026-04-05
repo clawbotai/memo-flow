@@ -3,10 +3,10 @@ import path from 'path';
 
 export const dynamic = 'force-dynamic';
 
-const PROGRESS_FILE = path.join(process.cwd(), '.whisper-install-progress.json');
+const PROGRESS_FILE = path.join(process.cwd(), '.ffmpeg-install-progress.json');
 
 interface InstallProgress {
-  status: 'idle' | 'cloning' | 'compiling' | 'completed' | 'error';
+  status: 'idle' | 'installing' | 'completed' | 'error';
   step: string;
   error?: string;
 }

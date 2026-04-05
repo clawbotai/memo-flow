@@ -6,6 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FlowLoader } from '@/components/ui/flow-loader';
+import { Copy, Check, ChevronDown, FileText, Clock } from 'lucide-react';
 import type { TranscribeSegment } from '@/types';
 import { TranscriptionRecord } from '@/types/transcription-history';
 
@@ -45,6 +46,9 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
   const [liveRecord, setLiveRecord] = useState<TranscriptionRecord>(record);
   const [connected, setConnected] = useState(false);
   const [retranscribing, setRetranscribing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  const copyMenuRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
   const doneRef = useRef(false);
@@ -175,6 +179,59 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
   const segments: TranscribeSegment[] = liveRecord.segments ?? [];
   const isActive = status !== 'completed' && status !== 'error';
   const canRetranscribe = (status === 'completed' || status === 'error') && !!record.audioUrl;
+
+  // 复制纯文本（不含时间戳）
+  const handleCopyPlainText = useCallback(async () => {
+    const textToCopy = segments.length > 0
+      ? segments.map(seg => seg.text).join('\n')
+      : liveRecord.transcript || '';
+    
+    if (!textToCopy) return;
+    
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      setCopyMenuOpen(false);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('复制失败:', error);
+    }
+  }, [segments, liveRecord.transcript]);
+
+  // 复制逐字稿（含时间戳）
+  const handleCopyWithTimestamp = useCallback(async () => {
+    const textToCopy = segments.length > 0
+      ? segments.map(seg => `[${seg.timestamp}] ${seg.text}`).join('\n')
+      : liveRecord.transcript || '';
+    
+    if (!textToCopy) return;
+    
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      setCopyMenuOpen(false);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('复制失败:', error);
+    }
+  }, [segments, liveRecord.transcript]);
+
+  // 点击外部关闭复制菜单
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (copyMenuRef.current && !copyMenuRef.current.contains(event.target as Node)) {
+        setCopyMenuOpen(false);
+      }
+    };
+    
+    if (copyMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [copyMenuOpen]);
 
   useEffect(() => {
     if (segments.length > 0 || liveRecord.transcript) {
@@ -328,6 +385,43 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
                 <Badge variant="outline" className="text-xs">
                   {segments.length} 片段
                 </Badge>
+                {/* 复制按钮 */}
+                {(segments.length > 0 || liveRecord.transcript) && (
+                  <div className="relative" ref={copyMenuRef}>
+                    <button
+                      onClick={() => setCopyMenuOpen(!copyMenuOpen)}
+                      className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+                      title="复制选项"
+                    >
+                      {copied ? (
+                        <Check className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    
+                    {/* 复制选项下拉菜单 */}
+                    {copyMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-50">
+                        <button
+                          onClick={handleCopyPlainText}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2 transition-colors"
+                        >
+                          <FileText className="w-4 h-4 text-muted-foreground" />
+                          <span>纯文本</span>
+                        </button>
+                        <button
+                          onClick={handleCopyWithTimestamp}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2 transition-colors"
+                        >
+                          <Clock className="w-4 h-4 text-muted-foreground" />
+                          <span>带时间戳</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </CardTitle>
           </CardHeader>

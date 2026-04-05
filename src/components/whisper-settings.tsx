@@ -136,7 +136,7 @@ function GeneralSettingsPanel({ visible }: { visible: boolean }) {
           <div>
             <h4 className="text-sm font-medium">主题</h4>
             <p className="mt-1 text-sm text-muted-foreground">
-              选择 MemoFlow 的显示模式。
+              选择 Linksy 的显示模式。
               {mounted && resolvedTheme && (
                 <span className="ml-1">当前实际显示为{resolvedTheme === "dark" ? "深色" : "浅色"}。</span>
               )}
@@ -212,12 +212,15 @@ function WhisperPanel({
     modelName: "small",
     threads: 4,
     outputDir: "",
+    ffmpegPath: "ffmpeg",
   });
   const [selectedModel, setSelectedModel] = React.useState<"small" | "medium">("small");
   const [downloading, setDownloading] = React.useState(false);
   const [downloadProgress, setDownloadProgress] = React.useState<DownloadProgress | null>(null);
   const [installing, setInstalling] = React.useState(false);
   const [installProgress, setInstallProgress] = React.useState<InstallProgress | null>(null);
+  const [ffmpegInstalling, setFfmpegInstalling] = React.useState(false);
+  const [ffmpegInstallProgress, setFfmpegInstallProgress] = React.useState<InstallProgress | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
@@ -226,6 +229,7 @@ function WhisperPanel({
 
   const downloadEsRef = React.useRef<EventSource | null>(null);
   const installEsRef = React.useRef<EventSource | null>(null);
+  const ffmpegEsRef = React.useRef<EventSource | null>(null);
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
@@ -241,6 +245,12 @@ function WhisperPanel({
 
       if (statusData.success) {
         setStatus(statusData.data);
+        if (statusData.data.whisperInstalled) {
+          setInstalling(false);
+        }
+        if (statusData.data.ffmpegInstalled) {
+          setFfmpegInstalling(false);
+        }
       }
 
       if (configData.success) {
@@ -265,6 +275,7 @@ function WhisperPanel({
     return () => {
       downloadEsRef.current?.close();
       installEsRef.current?.close();
+      ffmpegEsRef.current?.close();
     };
   }, []);
 
@@ -307,6 +318,8 @@ function WhisperPanel({
     const es = new EventSource("/api/whisper-install-progress");
     installEsRef.current = es;
 
+    let idleCount = 0;
+
     es.onmessage = (event) => {
       try {
         const data: InstallProgress = JSON.parse(event.data);
@@ -323,6 +336,14 @@ function WhisperPanel({
           setError(data.error || "安装失败");
           es.close();
           installEsRef.current = null;
+        } else if (data.status === "idle") {
+          idleCount++;
+          if (idleCount >= 3) {
+            setInstalling(false);
+            es.close();
+            installEsRef.current = null;
+            loadData();
+          }
         }
       } catch (err) {
         console.error("解析安装进度失败:", err);
@@ -332,6 +353,40 @@ function WhisperPanel({
     es.onerror = () => {
       es.close();
       installEsRef.current = null;
+    };
+  }, [loadData]);
+
+  const startFfmpegInstallTracking = React.useCallback(() => {
+    ffmpegEsRef.current?.close();
+
+    const es = new EventSource("/api/ffmpeg-install-progress");
+    ffmpegEsRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const data: InstallProgress = JSON.parse(event.data);
+        setFfmpegInstallProgress(data);
+
+        if (data.status === "completed") {
+          setFfmpegInstalling(false);
+          es.close();
+          ffmpegEsRef.current = null;
+          loadData();
+        } else if (data.status === "error") {
+          setFfmpegInstalling(false);
+          setError(data.error || "ffmpeg 安装失败");
+          es.close();
+          ffmpegEsRef.current = null;
+        }
+      } catch (err) {
+        console.error("解析 ffmpeg 安装进度失败:", err);
+      }
+    };
+
+    es.onerror = () => {
+      setFfmpegInstalling(false);
+      es.close();
+      ffmpegEsRef.current = null;
     };
   }, [loadData]);
 
@@ -362,9 +417,47 @@ function WhisperPanel({
       }
 
       startInstallTracking();
+
+      setTimeout(() => {
+        loadData();
+      }, 3000);
+
+      const safetyTimeout = setTimeout(() => {
+        setInstalling(false);
+      }, 60000);
+
+      const cleanup = () => clearTimeout(safetyTimeout);
+      return cleanup;
+
     } catch (err) {
       setInstalling(false);
       setError(err instanceof Error ? err.message : "启动安装失败");
+    }
+  };
+
+  const handleInstallFfmpeg = async () => {
+    setError(null);
+    setFfmpegInstalling(true);
+    setFfmpegInstallProgress(null);
+
+    try {
+      const res = await fetch("/api/ffmpeg-install", { method: "POST" });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "启动 ffmpeg 安装失败");
+      }
+
+      if (data.alreadyInstalled) {
+        setFfmpegInstalling(false);
+        loadData();
+        return;
+      }
+
+      startFfmpegInstallTracking();
+    } catch (err) {
+      setFfmpegInstalling(false);
+      setError(err instanceof Error ? err.message : "启动 ffmpeg 安装失败");
     }
   };
 
@@ -445,8 +538,18 @@ function WhisperPanel({
     setConfig((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleResetProjectPaths = () => {
+    setConfig((prev) => ({
+      ...prev,
+      outputDir: "transcripts",
+      whisperPath: "whisper.cpp/build/bin/whisper-cli",
+      modelPath: `models/ggml-${selectedModel}.bin`,
+      ffmpegPath: "ffmpeg",
+    }));
+  };
+
   const modelExists = status?.modelName === selectedModel && status?.modelInstalled;
-  const isBusy = installing || downloading;
+  const isBusy = installing || downloading || saving || ffmpegInstalling;
 
   const getDownloadButtonContent = () => {
     if (installing) {
@@ -578,6 +681,58 @@ function WhisperPanel({
 
               <div className="border-t border-border/50 pt-4">
                 <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">ffmpeg</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "h-2.5 w-2.5 rounded-full",
+                        status?.ffmpegInstalled ? "bg-green-500" : "bg-red-500"
+                      )}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {status?.ffmpegInstalled ? "已安装" : "未安装"}
+                    </span>
+                  </div>
+                </div>
+                {!status?.ffmpegInstalled && (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      需要安装 ffmpeg 才能进行音频格式转换。
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleInstallFfmpeg}
+                      disabled={isBusy}
+                      className="w-full sm:w-auto"
+                    >
+                      {ffmpegInstalling ? (
+                        <>
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          安装中...
+                        </>
+                      ) : (
+                        <>
+                          <Terminal className="mr-2 h-3.5 w-3.5" />
+                          安装 ffmpeg
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {ffmpegInstalling && ffmpegInstallProgress && (
+                  <div className="mt-2 rounded-xl bg-muted/60 px-3 py-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span className="text-muted-foreground">{ffmpegInstallProgress.step}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-border/50 pt-4">
+                <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">模型文件</span>
                   <div className="flex items-center gap-2">
                     <span
@@ -705,12 +860,28 @@ function WhisperPanel({
 
               {showAdvanced && (
                 <div className="grid gap-4 rounded-2xl border border-border/60 bg-background/70 p-4">
+                  <div className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      目录支持相对路径，相对于当前项目根目录解析。
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleResetProjectPaths}
+                      disabled={isBusy}
+                      className="w-full sm:w-auto"
+                    >
+                      使用当前项目默认目录
+                    </Button>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-xs font-medium">转录文件目录</label>
                     <Input
                       value={config.outputDir}
                       onChange={(e) => handleConfigChange("outputDir", e.target.value)}
-                      placeholder="memo-flow/transcripts"
+                      placeholder="transcripts"
                     />
                     <p className="text-xs text-muted-foreground">
                       转录完成后，文件将保存到此目录下（以播客标题命名的子文件夹）。
@@ -722,8 +893,11 @@ function WhisperPanel({
                     <Input
                       value={config.whisperPath}
                       onChange={(e) => handleConfigChange("whisperPath", e.target.value)}
-                      placeholder="memo-flow/whisper.cpp/build/bin/whisper-cli"
+                      placeholder="whisper.cpp/build/bin/whisper-cli"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      推荐使用当前项目内的相对路径，便于迁移目录。
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -731,8 +905,23 @@ function WhisperPanel({
                     <Input
                       value={config.modelPath}
                       onChange={(e) => handleConfigChange("modelPath", e.target.value)}
-                      placeholder="memo-flow/models/ggml-small.bin"
+                      placeholder={`models/ggml-${selectedModel}.bin`}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      模型建议放在项目内的 `models/` 目录。
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium">ffmpeg 路径</label>
+                    <Input
+                      value={config.ffmpegPath}
+                      onChange={(e) => handleConfigChange("ffmpegPath", e.target.value)}
+                      placeholder="ffmpeg"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      用于转换音频格式（需 16kHz WAV）。
+                    </p>
                   </div>
 
                   <div className="space-y-2">
