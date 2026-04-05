@@ -10,6 +10,8 @@
 - [src/app/api/whisper-status/route.ts](file://src/app/api/whisper-status/route.ts)
 - [src/app/api/whisper-install/route.ts](file://src/app/api/whisper-install/route.ts)
 - [src/app/api/whisper-install-progress/route.ts](file://src/app/api/whisper-install-progress/route.ts)
+- [src/app/api/ffmpeg-install/route.ts](file://src/app/api/ffmpeg-install/route.ts)
+- [src/app/api/ffmpeg-install-progress/route.ts](file://src/app/api/ffmpeg-install-progress/route.ts)
 - [src/app/api/retranscribe/route.ts](file://src/app/api/retranscribe/route.ts)
 - [src/components/whisper-settings.tsx](file://src/components/whisper-settings.tsx)
 - [src/types/index.ts](file://src/types/index.ts)
@@ -21,11 +23,11 @@
 
 ## 更新摘要
 **所做更改**
-- 新增 isValidWhisperExecutable 验证函数，提供完整的可执行文件验证机制
-- 新增 getWhisperExecutionOptions 环境配置函数，优化执行环境设置
-- 扩展 PATH 环境变量处理，支持多平台路径解析
-- 增强可执行文件权限检查和自动修复机制
-- 完善动态库路径配置，支持 macOS 和 Linux 系统
+- 新增完整的安装进度监控系统，支持 Whisper 和 FFmpeg 的实时进度跟踪
+- SSE 连接管理得到显著改进，包括更好的资源清理和错误处理
+- 新增 FFmpeg 安装进度接口，提供独立的安装状态监控
+- 增强的事件流管理，支持更稳定的实时通信
+- 改进的安装流程，支持分阶段状态跟踪和错误恢复
 
 ## 目录
 1. [简介](#简介)
@@ -44,6 +46,8 @@
 - 性能参数调优：线程数与模型大小的关系
 - 模型下载流程：进度跟踪、完整性校验与错误恢复
 - 配置状态检查与验证：安装状态监控与兼容性检测
+- **新增**：完整的安装进度监控系统，支持 Whisper 和 FFmpeg 的实时进度跟踪
+- **新增**：SSE 连接管理改进，提供更稳定的实时通信
 - 配置文件管理最佳实践：路径规范、权限与版本控制
 - 故障排除与常见问题解决
 
@@ -60,9 +64,11 @@ subgraph "后端 API"
 ConfigAPI["配置接口<br/>src/app/api/whisper-config/route.ts"]
 StatusAPI["状态接口<br/>src/app/api/whisper-status/route.ts"]
 DownloadAPI["下载接口<br/>src/app/api/whisper-download/route.ts"]
-ProgressAPI["进度接口<br/>src/app/api/whisper-download-progress/route.ts"]
+ProgressAPI["下载进度接口<br/>src/app/api/whisper-download-progress/route.ts"]
 InstallAPI["安装接口<br/>src/app/api/whisper-install/route.ts"]
 InstallProgressAPI["安装进度接口<br/>src/app/api/whisper-install-progress/route.ts"]
+FfmpegInstallAPI["FFmpeg 安装接口<br/>src/app/api/ffmpeg-install/route.ts"]
+FfmpegInstallProgressAPI["FFmpeg 安装进度接口<br/>src/app/api/ffmpeg-install-progress/route.ts"]
 RetranscribeAPI["重新转录接口<br/>src/app/api/retranscribe/route.ts"]
 end
 subgraph "业务逻辑"
@@ -76,6 +82,8 @@ Settings --> DownloadAPI
 Settings --> ProgressAPI
 Settings --> InstallAPI
 Settings --> InstallProgressAPI
+Settings --> FfmpegInstallAPI
+Settings --> FfmpegInstallProgressAPI
 Settings --> RetranscribeAPI
 ConfigAPI --> ConfigLib
 StatusAPI --> ConfigLib
@@ -83,6 +91,8 @@ DownloadAPI --> ConfigLib
 ProgressAPI --> DownloadAPI
 InstallAPI --> ConfigLib
 InstallProgressAPI --> InstallAPI
+FfmpegInstallAPI --> ConfigLib
+FfmpegInstallProgressAPI --> FfmpegInstallAPI
 RetranscribeAPI --> ConfigLib
 Settings --> WhisperLib
 ConfigLib --> WhisperLib
@@ -90,26 +100,30 @@ ConfigLib --> WhisperLib
 
 **图表来源**
 - [src/app/page.tsx:1-243](file://src/app/page.tsx#L1-L243)
-- [src/components/whisper-settings.tsx:1-664](file://src/components/whisper-settings.tsx#L1-L664)
+- [src/components/whisper-settings.tsx:1-1028](file://src/components/whisper-settings.tsx#L1-L1028)
 - [src/app/api/whisper-config/route.ts:1-125](file://src/app/api/whisper-config/route.ts#L1-L125)
 - [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
 - [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-141](file://src/app/api/whisper-download-progress/route.ts#L1-L141)
 - [src/app/api/whisper-install/route.ts:1-143](file://src/app/api/whisper-install/route.ts#L1-L143)
 - [src/app/api/whisper-install-progress/route.ts:1-101](file://src/app/api/whisper-install-progress/route.ts#L1-L101)
+- [src/app/api/ffmpeg-install/route.ts:1-229](file://src/app/api/ffmpeg-install/route.ts#L1-L229)
+- [src/app/api/ffmpeg-install-progress/route.ts:1-101](file://src/app/api/ffmpeg-install-progress/route.ts#L1-L101)
 - [src/app/api/retranscribe/route.ts:1-200](file://src/app/api/retranscribe/route.ts#L1-L200)
 - [src/lib/whisper-config.ts:1-398](file://src/lib/whisper-config.ts#L1-L398)
 - [src/lib/whisper.ts:1-261](file://src/lib/whisper.ts#L1-L261)
 
 **章节来源**
 - [src/app/page.tsx:1-243](file://src/app/page.tsx#L1-L243)
-- [src/components/whisper-settings.tsx:1-664](file://src/components/whisper-settings.tsx#L1-L664)
+- [src/components/whisper-settings.tsx:1-1028](file://src/components/whisper-settings.tsx#L1-L1028)
 - [src/app/api/whisper-config/route.ts:1-125](file://src/app/api/whisper-config/route.ts#L1-L125)
 - [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
 - [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-141](file://src/app/api/whisper-download-progress/route.ts#L1-L141)
 - [src/app/api/whisper-install/route.ts:1-143](file://src/app/api/whisper-install/route.ts#L1-L143)
 - [src/app/api/whisper-install-progress/route.ts:1-101](file://src/app/api/whisper-install-progress/route.ts#L1-L101)
+- [src/app/api/ffmpeg-install/route.ts:1-229](file://src/app/api/ffmpeg-install/route.ts#L1-L229)
+- [src/app/api/ffmpeg-install-progress/route.ts:1-101](file://src/app/api/ffmpeg-install-progress/route.ts#L1-L101)
 - [src/app/api/retranscribe/route.ts:1-200](file://src/app/api/retranscribe/route.ts#L1-L200)
 - [src/lib/whisper-config.ts:1-398](file://src/lib/whisper-config.ts#L1-L398)
 - [src/lib/whisper.ts:1-261](file://src/lib/whisper.ts#L1-L261)
@@ -118,6 +132,7 @@ ConfigLib --> WhisperLib
 - 配置管理模块：负责读取/保存配置、环境变量覆盖、模型名推断与文件大小格式化
 - 转写封装模块：封装 whisper.cpp 的调用，提供转写能力与结果解析
 - API 路由：提供配置查询/保存、状态查询、模型下载与进度推送
+- **新增**：安装进度监控模块：提供 Whisper 和 FFmpeg 的实时安装进度跟踪
 - 设置对话框：提供用户界面，支持模型选择、下载进度跟踪与配置保存
 
 **章节来源**
@@ -127,10 +142,10 @@ ConfigLib --> WhisperLib
 - [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
 - [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-141](file://src/app/api/whisper-download-progress/route.ts#L1-L141)
-- [src/components/whisper-settings.tsx:1-664](file://src/components/whisper-settings.tsx#L1-L664)
+- [src/components/whisper-settings.tsx:1-1028](file://src/components/whisper-settings.tsx#L1-L1028)
 
 ## 架构总览
-系统采用前后端分离的 API 设计：前端通过对话框发起配置与下载请求，后端路由处理业务逻辑并将结果以 JSON/SSE 形式返回；底层通过子进程调用 whisper.cpp 可执行文件完成转写。
+系统采用前后端分离的 API 设计：前端通过对话框发起配置与下载请求，后端路由处理业务逻辑并将结果以 JSON/SSE 形式返回；底层通过子进程调用 whisper.cpp 可执行文件完成转写。**新增**：支持独立的 Whisper 和 FFmpeg 安装进度监控，提供更精细的用户体验。
 
 ```mermaid
 sequenceDiagram
@@ -138,9 +153,11 @@ participant UI as "设置对话框"
 participant ConfigAPI as "配置接口"
 participant StatusAPI as "状态接口"
 participant DownloadAPI as "下载接口"
-participant ProgressAPI as "进度接口"
+participant ProgressAPI as "下载进度接口"
 participant InstallAPI as "安装接口"
 participant InstallProgressAPI as "安装进度接口"
+participant FfmpegInstallAPI as "FFmpeg 安装接口"
+participant FfmpegInstallProgressAPI as "FFmpeg 安装进度接口"
 participant RetranscribeAPI as "重新转录接口"
 participant ConfigLib as "配置管理"
 participant WhisperLib as "转写封装"
@@ -159,6 +176,13 @@ InstallAPI->>ConfigLib : 更新配置
 InstallAPI-->>UI : 返回启动结果
 UI->>InstallProgressAPI : 建立 SSE 连接
 InstallProgressAPI-->>UI : 推送安装进度事件
+UI->>FfmpegInstallAPI : 触发 FFmpeg 安装
+FfmpegInstallAPI->>FfmpegInstallAPI : 写入 FFmpeg 安装进度文件
+FfmpegInstallAPI->>FfmpegInstallAPI : 通过 Homebrew 安装
+FfmpegInstallAPI->>ConfigLib : 更新配置
+FfmpegInstallAPI-->>UI : 返回启动结果
+UI->>FfmpegInstallProgressAPI : 建立 SSE 连接
+FfmpegInstallProgressAPI-->>UI : 推送 FFmpeg 安装进度事件
 UI->>DownloadAPI : 触发下载
 DownloadAPI->>DownloadAPI : 写入进度文件
 DownloadAPI->>DownloadAPI : 流式下载模型
@@ -178,6 +202,8 @@ RetranscribeAPI-->>UI : 返回转录结果
 - [src/app/api/whisper-status/route.ts:11-59](file://src/app/api/whisper-status/route.ts#L11-L59)
 - [src/app/api/whisper-install/route.ts:102-142](file://src/app/api/whisper-install/route.ts#L102-L142)
 - [src/app/api/whisper-install-progress/route.ts:23-100](file://src/app/api/whisper-install-progress/route.ts#L23-L100)
+- [src/app/api/ffmpeg-install/route.ts:186-228](file://src/app/api/ffmpeg-install/route.ts#L186-L228)
+- [src/app/api/ffmpeg-install-progress/route.ts:23-100](file://src/app/api/ffmpeg-install-progress/route.ts#L23-L100)
 - [src/app/api/whisper-download/route.ts:173-234](file://src/app/api/whisper-download/route.ts#L173-L234)
 - [src/app/api/whisper-download-progress/route.ts:45-140](file://src/app/api/whisper-download-progress/route.ts#L45-L140)
 - [src/app/api/retranscribe/route.ts:56-57](file://src/app/api/retranscribe/route.ts#L56-L57)
@@ -194,6 +220,7 @@ RetranscribeAPI-->>UI : 返回转录结果
 - **扩展 PATH 处理**：支持多平台路径解析，包括 /usr/local/bin、/opt/homebrew/bin 等
 - **动态库路径配置**：自动检测并配置动态库路径，支持 macOS 和 Linux 系统
 - **权限自动修复**：可执行文件权限不足时自动尝试修复
+- **新增**：isValidFfmpegExecutable 函数，专门用于 FFmpeg 可执行文件验证
 
 **核心功能**：
 - 配置文件路径：位于项目根目录的 .whisper-config.json
@@ -241,6 +268,11 @@ ExtendedEnv --> Return["返回配置"]
   - 扩展 PATH 环境变量
   - 自动检测动态库路径
   - 支持多平台环境变量设置
+
+- **新增**：isValidFfmpegExecutable 函数
+  - 专门用于 FFmpeg 可执行文件验证
+  - 支持命令路径解析和权限检查
+  - 提供详细的验证信息
 
 ```mermaid
 sequenceDiagram
@@ -425,6 +457,46 @@ PROG-->>UI : 推送状态/步骤/完成/错误
 - [src/app/api/whisper-install/route.ts:1-200](file://src/app/api/whisper-install/route.ts#L1-L200)
 - [src/app/api/whisper-install-progress/route.ts:1-101](file://src/app/api/whisper-install-progress/route.ts#L1-L101)
 
+### FFmpeg 安装与进度（src/app/api/ffmpeg-install/route.ts、src/app/api/ffmpeg-install-progress/route.ts）
+**新增功能**：
+- 安装接口：
+  - 通过 Homebrew 自动安装 FFmpeg，支持 macOS 系统
+  - 检测并修复依赖库链接问题，提高安装成功率
+  - 后台异步安装，写入进度文件（.ffmpeg-install-progress.json）
+  - 安装完成后自动更新配置并返回成功状态
+- 进度接口：
+  - SSE 推送安装进度，包含状态、步骤说明与错误信息
+  - 支持检查 Homebrew 锁文件，避免并发安装冲突
+  - 提供详细的错误诊断和解决方案
+
+```mermaid
+sequenceDiagram
+participant UI as "设置对话框"
+participant FFMPEG_INSTALL as "FFmpeg 安装接口"
+participant FS as "文件系统"
+participant BREW as "Homebrew"
+participant PROG as "FFmpeg 安装进度接口"
+UI->>FFMPEG_INSTALL : POST /api/ffmpeg-install
+FFMPEG_INSTALL->>FS : 检查现有安装状态
+FFMPEG_INSTALL->>BREW : 检查 Homebrew 可用性
+BREW-->>FFMPEG_INSTALL : 返回可用状态
+FFMPEG_INSTALL->>FS : 写入进度文件(状态=installing)
+FFMPEG_INSTALL->>BREW : 安装 FFmpeg (可能需要几分钟)
+BREW-->>FFMPEG_INSTALL : 安装完成
+FFMPEG_INSTALL->>FS : 保存配置(更新 ffmpegPath)
+FFMPEG_INSTALL-->>UI : 返回启动结果
+UI->>PROG : 建立 SSE 连接
+PROG-->>UI : 推送状态/步骤/完成/错误
+```
+
+**图表来源**
+- [src/app/api/ffmpeg-install/route.ts:186-228](file://src/app/api/ffmpeg-install/route.ts#L186-L228)
+- [src/app/api/ffmpeg-install-progress/route.ts:23-100](file://src/app/api/ffmpeg-install-progress/route.ts#L23-L100)
+
+**章节来源**
+- [src/app/api/ffmpeg-install/route.ts:1-229](file://src/app/api/ffmpeg-install/route.ts#L1-L229)
+- [src/app/api/ffmpeg-install-progress/route.ts:1-101](file://src/app/api/ffmpeg-install-progress/route.ts#L1-L101)
+
 ### 重新转录功能（src/app/api/retranscribe/route.ts）
 - 支持流式转录，实时解析输出并提供进度反馈
 - 使用 getWhisperExecutionOptions 优化执行环境
@@ -440,6 +512,7 @@ PROG-->>UI : 推送状态/步骤/完成/错误
   - 模型选择：small/medium，动态更新 modelPath
   - 下载流程：触发下载并建立 SSE 连接跟踪进度
   - 安装流程：触发安装并建立 SSE 连接跟踪进度
+  - **新增**：FFmpeg 安装流程：触发 FFmpeg 安装并建立 SSE 连接跟踪进度
   - 配置保存：校验后提交配置
   - 错误处理：统一错误提示与资源清理
 
@@ -460,6 +533,12 @@ InstallSSE --> InstallProgress["接收安装进度事件"]
 InstallProgress --> InstallCompleted{"安装完成/错误?"}
 InstallCompleted --> |完成| InstallReload["重新加载状态"]
 InstallCompleted --> |错误| InstallShowError["显示错误"]
+Ready --> FfmpegInstall["触发 FFmpeg 安装"]
+FfmpegInstall --> FfmpegInstallSSE["建立 FFmpeg 安装 SSE 连接"]
+FfmpegInstallSSE --> FfmpegInstallProgress["接收 FFmpeg 安装进度事件"]
+FfmpegInstallProgress --> FfmpegInstallCompleted{"FFmpeg 安装完成/错误?"}
+FfmpegInstallCompleted --> |完成| FfmpegInstallReload["重新加载状态"]
+FfmpegInstallCompleted --> |错误| FfmpegInstallShowError["显示错误"]
 Ready --> Save["保存配置"]
 Save --> Done["关闭对话框"]
 ```
@@ -470,7 +549,7 @@ Save --> Done["关闭对话框"]
 - [src/components/whisper-settings.tsx:164-197](file://src/components/whisper-settings.tsx#L164-L197)
 
 **章节来源**
-- [src/components/whisper-settings.tsx:1-996](file://src/components/whisper-settings.tsx#L1-L996)
+- [src/components/whisper-settings.tsx:1-1028](file://src/components/whisper-settings.tsx#L1-L1028)
 
 ## 依赖关系分析
 - 类型定义：WhisperConfig、WhisperStatus、ApiResponse
@@ -488,13 +567,16 @@ StatusAPI --> ConfigLib
 Settings --> ConfigAPI
 Settings --> StatusAPI
 Settings --> DownloadAPI["下载接口"]
-Settings --> ProgressAPI["进度接口"]
+Settings --> ProgressAPI["下载进度接口"]
 Settings --> InstallAPI["安装接口"]
 Settings --> InstallProgressAPI["安装进度接口"]
+Settings --> FfmpegInstallAPI["FFmpeg 安装接口"]
+Settings --> FfmpegInstallProgressAPI["FFmpeg 安装进度接口"]
 Settings --> RetranscribeAPI
 ConfigLib --> WhisperLib["转写封装"]
 DownloadAPI --> ConfigLib
 InstallAPI --> ConfigLib
+FfmpegInstallAPI --> ConfigLib
 RetranscribeAPI --> ConfigLib
 ```
 
@@ -502,7 +584,7 @@ RetranscribeAPI --> ConfigLib
 - [src/types/index.ts:1-46](file://src/types/index.ts#L1-L46)
 - [src/app/api/whisper-config/route.ts:1-127](file://src/app/api/whisper-config/route.ts#L1-L127)
 - [src/app/api/whisper-status/route.ts:1-66](file://src/app/api/whisper-status/route.ts#L1-L66)
-- [src/components/whisper-settings.tsx:1-996](file://src/components/whisper-settings.tsx#L1-L996)
+- [src/components/whisper-settings.tsx:1-1028](file://src/components/whisper-settings.tsx#L1-L1028)
 - [src/lib/whisper-config.ts:1-398](file://src/lib/whisper-config.ts#L1-L398)
 - [src/lib/whisper.ts:1-261](file://src/lib/whisper.ts#L1-L261)
 
@@ -517,6 +599,8 @@ RetranscribeAPI --> ConfigLib
 - 转写性能：合理设置线程数与模型大小，避免过度占用系统资源
 - 安装性能：编译过程可能耗时较长，建议在空闲时段进行
 - **新增**：可执行文件验证仅在必要时进行，避免重复验证影响性能
+- **新增**：SSE 连接采用 1 秒轮询间隔，平衡实时性和资源消耗
+- **新增**：安装进度文件采用 JSON 格式，便于快速读取和解析
 
 ## 故障排除指南
 - 无法找到 whisper.cpp：
@@ -535,6 +619,14 @@ RetranscribeAPI --> ConfigLib
   - 现象：进度停留在 cloning 或 compiling，最终 error
   - 处理：检查网络连接和编译工具，清理进度文件后重试
   - 参考：[src/app/api/whisper-install/route.ts:91-99](file://src/app/api/whisper-install/route.ts#L91-L99)
+- **新增**：FFmpeg 安装失败：
+  - 现象：FFmpeg 安装进度停留在 installing，最终 error
+  - 处理：检查 Homebrew 可用性，清理锁文件后重试；参考错误信息中的具体解决方案
+  - 参考：[src/app/api/ffmpeg-install/route.ts:147-154](file://src/app/api/ffmpeg-install/route.ts#L147-L154)
+- **新增**：SSE 连接异常：
+  - 现象：进度事件丢失或连接中断
+  - 处理：检查网络连接，确认服务器端口可达；前端会自动清理和重连
+  - 参考：[src/app/api/whisper-install-progress/route.ts:83-90](file://src/app/api/whisper-install-progress/route.ts#L83-L90)
 - 配置保存失败：
   - 现象：POST /api/whisper-config 返回错误
   - 处理：检查请求体格式与字段类型，确保 threads 为正整数
@@ -556,6 +648,7 @@ RetranscribeAPI --> ConfigLib
 - [setup-whisper.sh:1-47](file://setup-whisper.sh#L1-L47)
 - [src/app/api/whisper-download/route.ts:147-166](file://src/app/api/whisper-download/route.ts#L147-L166)
 - [src/app/api/whisper-install/route.ts:91-99](file://src/app/api/whisper-install/route.ts#L91-L99)
+- [src/app/api/ffmpeg-install/route.ts:147-154](file://src/app/api/ffmpeg-install/route.ts#L147-L154)
 - [src/app/api/whisper-config/route.ts:59-96](file://src/app/api/whisper-config/route.ts#L59-L96)
 - [src/lib/whisper.ts:103-108](file://src/lib/whisper.ts#L103-L108)
 - [src/lib/whisper-config.ts:123-181](file://src/lib/whisper-config.ts#L123-L181)
@@ -570,5 +663,9 @@ RetranscribeAPI --> ConfigLib
 - **扩展的 PATH 处理**：支持 /usr/local/bin、/opt/homebrew/bin、/opt/homebrew/sbin 等多平台路径，提高可执行文件查找成功率
 - **动态库路径自动配置**：自动检测并配置 src、ggml、ggml-blas、ggml-metal 等目录，解决 macOS 和 Linux 系统的动态库加载问题
 - **智能权限修复**：可执行文件权限不足时自动尝试修复，提升系统健壮性
+- **新增**：完整的安装进度监控系统，支持 Whisper 和 FFmpeg 的实时进度跟踪
+- **新增**：SSE 连接管理改进，提供更稳定的实时通信和资源清理机制
+- **新增**：FFmpeg 安装进度接口，提供独立的安装状态监控和错误诊断
+- **新增**：双进度监控架构，支持分阶段状态跟踪和错误恢复
 
 建议在生产环境中结合实际硬件条件调整线程数与模型大小，并完善日志与监控以便快速定位问题。新的配置管理系统显著提升了在不同环境中的可靠性，为用户提供了更加稳定和易用的体验。
