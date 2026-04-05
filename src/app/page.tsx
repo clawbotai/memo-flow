@@ -103,8 +103,8 @@ export default function Home() {
         <div className="space-y-8">
           {/* 欢迎区域 */}
           <div>
-            <h1 className="text-2xl font-semibold">欢迎使用 MemoFlow</h1>
-            <p className="text-muted-foreground mt-1">将播客内容转化为可检索、可管理的知识</p>
+            <h1 className="text-2xl font-semibold">欢迎使用 Linksy</h1>
+            <p className="text-muted-foreground mt-1">Turn any link into reusable knowledge</p>
           </div>
 
           {/* 功能入口卡片 */}

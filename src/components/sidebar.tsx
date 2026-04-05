@@ -71,7 +71,7 @@ export function Sidebar({ activePage, onNavigate, onOpenSettings }: SidebarProps
       {/* Logo 区域 */}
       <div className="p-6">
         <h1 className="font-semibold text-xl bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
-          MemoFlow
+          Linksy
         </h1>
       </div>
 
@@ -160,7 +160,7 @@ export function Sidebar({ activePage, onNavigate, onOpenSettings }: SidebarProps
           <aside className="fixed left-0 top-0 w-60 h-screen flex-col border-r bg-background z-50 md:hidden animate-in slide-in-from-left">
             <div className="flex items-center justify-between p-6">
               <h1 className="font-semibold text-xl bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
-                MemoFlow
+                Linksy
               </h1>
               <button
                 onClick={() => setMobileOpen(false)}

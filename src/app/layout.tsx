@@ -8,8 +8,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 const lora = Lora({ subsets: ["latin"], weight: ['400', '500', '600', '700'] });
 
 export const metadata: Metadata = {
-  title: "MemoFlow - 播客转录工具",
-  description: "小宇宙播客一键转录为文字",
+  title: "Linksy - Turn any link into reusable knowledge",
+  description: "Turn any link into reusable knowledge",
 };
 
 export default function RootLayout({

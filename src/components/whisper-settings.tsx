@@ -136,7 +136,7 @@ function GeneralSettingsPanel({ visible }: { visible: boolean }) {
           <div>
             <h4 className="text-sm font-medium">主题</h4>
             <p className="mt-1 text-sm text-muted-foreground">
-              选择 MemoFlow 的显示模式。
+              选择 Linksy 的显示模式。
               {mounted && resolvedTheme && (
                 <span className="ml-1">当前实际显示为{resolvedTheme === "dark" ? "深色" : "浅色"}。</span>
               )}
