@@ -2,9 +2,10 @@
 
 <cite>
 **本文档引用的文件**
+- [src/hooks/use-transcription-config.ts](file://src/hooks/use-transcription-config.ts)
 - [src/lib/whisper-config.ts](file://src/lib/whisper-config.ts)
 - [src/lib/whisper.ts](file://src/lib/whisper.ts)
-- [src/app/api/whisper-config/route.ts](file://src/app/api/whisper-config/route.ts)
+- [src/app/api/whisper-status/route.ts](file://src/app/api/whisper-status/route.ts)
 - [src/app/api/whisper-download/route.ts](file://src/app/api/whisper-download/route.ts)
 - [src/app/api/whisper-download-progress/route.ts](file://src/app/api/whisper-download-progress/route.ts)
 - [src/app/api/whisper-status/route.ts](file://src/app/api/whisper-status/route.ts)
@@ -23,11 +24,11 @@
 
 ## 更新摘要
 **所做更改**
-- 新增完整的安装进度监控系统，支持 Whisper 和 FFmpeg 的实时进度跟踪
-- SSE 连接管理得到显著改进，包括更好的资源清理和错误处理
-- 新增 FFmpeg 安装进度接口，提供独立的安装状态监控
-- 增强的事件流管理，支持更稳定的实时通信
-- 改进的安装流程，支持分阶段状态跟踪和错误恢复
+- 完全迁移至客户端 localStorage 配置管理，移除服务器端配置 API
+- 新增 useTranscriptionConfig hook 提供统一的多引擎配置结构
+- 保留服务器端状态检查 API 以支持环境验证
+- 更新配置同步机制，实现前端与后端的协同工作
+- 新增在线 ASR 引擎配置支持
 
 ## 目录
 1. [简介](#简介)
@@ -42,26 +43,27 @@
 
 ## 简介
 本文件为 Whisper 配置管理系统的综合技术文档，围绕本地语音识别模型的配置、下载与状态管理展开，涵盖以下主题：
+- **全新**：客户端 localStorage 配置管理，完全替代服务器端配置 API
+- **新增**：useTranscriptionConfig hook 提供统一的多引擎配置结构
 - Whisper 模型配置项：模型路径、线程数、输出目录等
 - 性能参数调优：线程数与模型大小的关系
 - 模型下载流程：进度跟踪、完整性校验与错误恢复
 - 配置状态检查与验证：安装状态监控与兼容性检测
-- **新增**：完整的安装进度监控系统，支持 Whisper 和 FFmpeg 的实时进度跟踪
-- **新增**：SSE 连接管理改进，提供更稳定的实时通信
+- **新增**：在线 ASR 引擎配置支持（千问 ASR）
 - 配置文件管理最佳实践：路径规范、权限与版本控制
 - 故障排除与常见问题解决
 
 ## 项目结构
-该项目采用 Next.js 应用结构，前端组件与后端 API 路由分离，核心逻辑集中在 lib 层与 API 路由层，UI 通过对话框组件提供交互。
+该项目采用 Next.js 应用结构，前端组件与后端 API 路由分离，核心逻辑集中在 lib 层与 API 路由层，UI 通过对话框组件提供交互。**重大变更**：配置管理完全迁移到客户端，服务器端仅提供状态检查和下载服务。
 
 ```mermaid
 graph TB
 subgraph "前端"
 UI["页面组件<br/>src/app/page.tsx"]
 Settings["设置对话框<br/>src/components/whisper-settings.tsx"]
+Hook["配置 Hook<br/>src/hooks/use-transcription-config.ts"]
 end
 subgraph "后端 API"
-ConfigAPI["配置接口<br/>src/app/api/whisper-config/route.ts"]
 StatusAPI["状态接口<br/>src/app/api/whisper-status/route.ts"]
 DownloadAPI["下载接口<br/>src/app/api/whisper-download/route.ts"]
 ProgressAPI["下载进度接口<br/>src/app/api/whisper-download-progress/route.ts"]
@@ -76,7 +78,7 @@ ConfigLib["配置管理<br/>src/lib/whisper-config.ts"]
 WhisperLib["转写封装<br/>src/lib/whisper.ts"]
 end
 UI --> Settings
-Settings --> ConfigAPI
+Settings --> Hook
 Settings --> StatusAPI
 Settings --> DownloadAPI
 Settings --> ProgressAPI
@@ -85,7 +87,7 @@ Settings --> InstallProgressAPI
 Settings --> FfmpegInstallAPI
 Settings --> FfmpegInstallProgressAPI
 Settings --> RetranscribeAPI
-ConfigAPI --> ConfigLib
+Hook --> ConfigLib
 StatusAPI --> ConfigLib
 DownloadAPI --> ConfigLib
 ProgressAPI --> DownloadAPI
@@ -100,12 +102,12 @@ ConfigLib --> WhisperLib
 
 **图表来源**
 - [src/app/page.tsx:1-243](file://src/app/page.tsx#L1-L243)
-- [src/components/whisper-settings.tsx:1-1028](file://src/components/whisper-settings.tsx#L1-L1028)
-- [src/app/api/whisper-config/route.ts:1-125](file://src/app/api/whisper-config/route.ts#L1-L125)
-- [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
+- [src/components/whisper-settings.tsx:1-1251](file://src/components/whisper-settings.tsx#L1-L1251)
+- [src/hooks/use-transcription-config.ts:1-148](file://src/hooks/use-transcription-config.ts#L1-L148)
+- [src/app/api/whisper-status/route.ts:1-66](file://src/app/api/whisper-status/route.ts#L1-L66)
 - [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-141](file://src/app/api/whisper-download-progress/route.ts#L1-L141)
-- [src/app/api/whisper-install/route.ts:1-143](file://src/app/api/whisper-install/route.ts#L1-L143)
+- [src/app/api/whisper-install/route.ts:1-220](file://src/app/api/whisper-install/route.ts#L1-L220)
 - [src/app/api/whisper-install-progress/route.ts:1-101](file://src/app/api/whisper-install-progress/route.ts#L1-L101)
 - [src/app/api/ffmpeg-install/route.ts:1-229](file://src/app/api/ffmpeg-install/route.ts#L1-L229)
 - [src/app/api/ffmpeg-install-progress/route.ts:1-101](file://src/app/api/ffmpeg-install-progress/route.ts#L1-L101)
@@ -115,12 +117,12 @@ ConfigLib --> WhisperLib
 
 **章节来源**
 - [src/app/page.tsx:1-243](file://src/app/page.tsx#L1-L243)
-- [src/components/whisper-settings.tsx:1-1028](file://src/components/whisper-settings.tsx#L1-L1028)
-- [src/app/api/whisper-config/route.ts:1-125](file://src/app/api/whisper-config/route.ts#L1-L125)
-- [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
+- [src/components/whisper-settings.tsx:1-1251](file://src/components/whisper-settings.tsx#L1-L1251)
+- [src/hooks/use-transcription-config.ts:1-148](file://src/hooks/use-transcription-config.ts#L1-L148)
+- [src/app/api/whisper-status/route.ts:1-66](file://src/app/api/whisper-status/route.ts#L1-L66)
 - [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-141](file://src/app/api/whisper-download-progress/route.ts#L1-L141)
-- [src/app/api/whisper-install/route.ts:1-143](file://src/app/api/whisper-install/route.ts#L1-L143)
+- [src/app/api/whisper-install/route.ts:1-220](file://src/app/api/whisper-install/route.ts#L1-L220)
 - [src/app/api/whisper-install-progress/route.ts:1-101](file://src/app/api/whisper-install-progress/route.ts#L1-L101)
 - [src/app/api/ffmpeg-install/route.ts:1-229](file://src/app/api/ffmpeg-install/route.ts#L1-L229)
 - [src/app/api/ffmpeg-install-progress/route.ts:1-101](file://src/app/api/ffmpeg-install-progress/route.ts#L1-L101)
@@ -129,28 +131,28 @@ ConfigLib --> WhisperLib
 - [src/lib/whisper.ts:1-261](file://src/lib/whisper.ts#L1-L261)
 
 ## 核心组件
+- **新增**：useTranscriptionConfig hook：提供客户端配置管理，自动同步 localStorage 与组件状态
 - 配置管理模块：负责读取/保存配置、环境变量覆盖、模型名推断与文件大小格式化
 - 转写封装模块：封装 whisper.cpp 的调用，提供转写能力与结果解析
-- API 路由：提供配置查询/保存、状态查询、模型下载与进度推送
-- **新增**：安装进度监控模块：提供 Whisper 和 FFmpeg 的实时安装进度跟踪
-- 设置对话框：提供用户界面，支持模型选择、下载进度跟踪与配置保存
+- API 路由：提供状态查询、模型下载与进度推送（配置管理仍由前端处理）
+- **新增**：多引擎配置结构：支持本地 Whisper 和在线 ASR 引擎的统一管理
 
 **章节来源**
+- [src/hooks/use-transcription-config.ts:1-148](file://src/hooks/use-transcription-config.ts#L1-L148)
 - [src/lib/whisper-config.ts:1-398](file://src/lib/whisper-config.ts#L1-L398)
 - [src/lib/whisper.ts:1-261](file://src/lib/whisper.ts#L1-L261)
-- [src/app/api/whisper-config/route.ts:1-125](file://src/app/api/whisper-config/route.ts#L1-L125)
-- [src/app/api/whisper-status/route.ts:1-60](file://src/app/api/whisper-status/route.ts#L1-L60)
+- [src/app/api/whisper-status/route.ts:1-66](file://src/app/api/whisper-status/route.ts#L1-L66)
 - [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-141](file://src/app/api/whisper-download-progress/route.ts#L1-L141)
-- [src/components/whisper-settings.tsx:1-1028](file://src/components/whisper-settings.tsx#L1-L1028)
+- [src/components/whisper-settings.tsx:1-1251](file://src/components/whisper-settings.tsx#L1-L1251)
 
 ## 架构总览
-系统采用前后端分离的 API 设计：前端通过对话框发起配置与下载请求，后端路由处理业务逻辑并将结果以 JSON/SSE 形式返回；底层通过子进程调用 whisper.cpp 可执行文件完成转写。**新增**：支持独立的 Whisper 和 FFmpeg 安装进度监控，提供更精细的用户体验。
+系统采用混合架构：前端通过 useTranscriptionConfig hook 管理配置（localStorage），后端 API 路由处理业务逻辑并将结果以 JSON/SSE 形式返回；底层通过子进程调用 whisper.cpp 可执行文件完成转写。**重大变更**：配置管理完全迁移到客户端，服务器端仅提供必要的状态检查和下载服务。
 
 ```mermaid
 sequenceDiagram
 participant UI as "设置对话框"
-participant ConfigAPI as "配置接口"
+participant Hook as "useTranscriptionConfig Hook"
 participant StatusAPI as "状态接口"
 participant DownloadAPI as "下载接口"
 participant ProgressAPI as "下载进度接口"
@@ -165,10 +167,9 @@ UI->>StatusAPI : 获取状态
 StatusAPI->>ConfigLib : 读取配置
 ConfigLib-->>StatusAPI : 返回状态数据
 StatusAPI-->>UI : 返回状态
-UI->>ConfigAPI : 保存配置
-ConfigAPI->>ConfigLib : 写入配置文件
-ConfigLib-->>ConfigAPI : 返回合并后配置
-ConfigAPI-->>UI : 返回保存结果
+UI->>Hook : 更新配置
+Hook->>Hook : 保存到 localStorage
+Hook-->>UI : 返回更新后的配置
 UI->>InstallAPI : 触发安装
 InstallAPI->>InstallAPI : 写入安装进度文件
 InstallAPI->>InstallAPI : 克隆仓库并编译
@@ -197,10 +198,10 @@ RetranscribeAPI-->>UI : 返回转录结果
 ```
 
 **图表来源**
-- [src/components/whisper-settings.tsx:86-120](file://src/components/whisper-settings.tsx#L86-L120)
-- [src/app/api/whisper-config/route.ts:10-28](file://src/app/api/whisper-config/route.ts#L10-L28)
+- [src/components/whisper-settings.tsx:240-268](file://src/components/whisper-settings.tsx#L240-L268)
+- [src/hooks/use-transcription-config.ts:84-148](file://src/hooks/use-transcription-config.ts#L84-L148)
 - [src/app/api/whisper-status/route.ts:11-59](file://src/app/api/whisper-status/route.ts#L11-L59)
-- [src/app/api/whisper-install/route.ts:102-142](file://src/app/api/whisper-install/route.ts#L102-L142)
+- [src/app/api/whisper-install/route.ts:179-219](file://src/app/api/whisper-install/route.ts#L179-L219)
 - [src/app/api/whisper-install-progress/route.ts:23-100](file://src/app/api/whisper-install-progress/route.ts#L23-L100)
 - [src/app/api/ffmpeg-install/route.ts:186-228](file://src/app/api/ffmpeg-install/route.ts#L186-L228)
 - [src/app/api/ffmpeg-install-progress/route.ts:23-100](file://src/app/api/ffmpeg-install-progress/route.ts#L23-L100)
@@ -212,17 +213,44 @@ RetranscribeAPI-->>UI : 返回转录结果
 
 ## 详细组件分析
 
-### 配置管理模块（src/lib/whisper-config.ts）
+### useTranscriptionConfig Hook（新增）
 
-**重大增强功能**：
-- **可执行文件验证系统**：新增 isValidWhisperExecutable 函数，提供完整的可执行文件验证机制
-- **环境配置优化**：新增 getWhisperExecutionOptions 函数，优化执行环境设置
-- **扩展 PATH 处理**：支持多平台路径解析，包括 /usr/local/bin、/opt/homebrew/bin 等
-- **动态库路径配置**：自动检测并配置动态库路径，支持 macOS 和 Linux 系统
-- **权限自动修复**：可执行文件权限不足时自动尝试修复
-- **新增**：isValidFfmpegExecutable 函数，专门用于 FFmpeg 可执行文件验证
+**重大架构变更**：
+- **完全客户端配置管理**：使用 localStorage 替代服务器端配置 API
+- **统一多引擎配置结构**：支持本地 Whisper 和在线 ASR 引擎的统一管理
+- **自动同步机制**：配置变更时自动持久化到 localStorage
+- **SSR 兼容性**：在服务器端渲染环境下返回默认配置
 
 **核心功能**：
+- 配置存储：使用 localStorage 键 "linksy-transcription-config"
+- 默认配置：包含 activeEngine、whisper 和 onlineASR 三个部分
+- 配置更新：提供 updateConfig、setActiveEngine、updateWhisperConfig、updateOnlineASRConfig 方法
+- 自动持久化：配置变更时自动保存到 localStorage
+
+```mermaid
+flowchart TD
+Start(["初始化 Hook"]) --> CheckSSR["检查 SSR 环境"]
+CheckSSR --> |SSR| LoadDefault["加载默认配置"]
+CheckSSR --> |CSR| LoadStorage["从 localStorage 加载配置"]
+LoadDefault --> SetState["设置组件状态"]
+LoadStorage --> ParseJSON["解析 JSON 数据"]
+ParseJSON --> MergeConfig["合并默认配置"]
+MergeConfig --> SetState
+SetState --> ListenChanges["监听配置变更"]
+ListenChanges --> SaveStorage["保存到 localStorage"]
+SaveStorage --> Return["返回配置钩子"]
+```
+
+**图表来源**
+- [src/hooks/use-transcription-config.ts:84-148](file://src/hooks/use-transcription-config.ts#L84-L148)
+- [src/hooks/use-transcription-config.ts:40-71](file://src/hooks/use-transcription-config.ts#L40-L71)
+
+**章节来源**
+- [src/hooks/use-transcription-config.ts:1-148](file://src/hooks/use-transcription-config.ts#L1-L148)
+
+### 配置管理模块（src/lib/whisper-config.ts）
+
+**保持不变的核心功能**：
 - 配置文件路径：位于项目根目录的 .whisper-config.json
 - 默认配置：包含 whisperPath、modelPath、modelName、threads、outputDir、ffmpegPath
 - 环境变量覆盖：WHISPER_PATH、WHISPER_MODEL_PATH、WHISPER_THREADS、OUTPUT_DIR、FFMPEG_PATH
@@ -231,6 +259,8 @@ RetranscribeAPI-->>UI : 返回转录结果
   - 相对路径：相对于项目根目录解析
   - 命令路径：通过 command -v 查找可执行文件
   - 项目名前缀：向后兼容旧版路径格式
+
+**新增**：isValidFfmpegExecutable 函数，专门用于 FFmpeg 可执行文件验证
 
 ```mermaid
 flowchart TD
@@ -249,54 +279,11 @@ ExtendedEnv --> Return["返回配置"]
 
 **图表来源**
 - [src/lib/whisper-config.ts:57-74](file://src/lib/whisper-config.ts#L57-L74)
-- [src/lib/whisper-config.ts:123-181](file://src/lib/whisper-config.ts#L123-L181)
-- [src/lib/whisper-config.ts:183-216](file://src/lib/whisper-config.ts#L183-L216)
+- [src/lib/whisper-config.ts:324-354](file://src/lib/whisper-config.ts#L324-L354)
+- [src/lib/whisper-config.ts:361-372](file://src/lib/whisper-config.ts#L361-L372)
 
 **章节来源**
 - [src/lib/whisper-config.ts:1-398](file://src/lib/whisper-config.ts#L1-L398)
-
-### 可执行文件验证系统
-
-**新增功能**：
-- **isValidWhisperExecutable**：完整的可执行文件验证函数
-  - 检查路径有效性与存在性
-  - 验证文件权限（自动尝试修复）
-  - 执行功能测试（--help 参数）
-  - 提供详细的错误日志
-
-- **getWhisperExecutionOptions**：优化的执行环境配置
-  - 扩展 PATH 环境变量
-  - 自动检测动态库路径
-  - 支持多平台环境变量设置
-
-- **新增**：isValidFfmpegExecutable 函数
-  - 专门用于 FFmpeg 可执行文件验证
-  - 支持命令路径解析和权限检查
-  - 提供详细的验证信息
-
-```mermaid
-sequenceDiagram
-participant Validator as "isValidWhisperExecutable"
-participant PathResolver as "路径解析"
-participant FS as "文件系统"
-participant Exec as "执行测试"
-Validator->>PathResolver : 解析可执行文件路径
-PathResolver-->>Validator : 返回绝对路径
-Validator->>FS : 检查文件存在性和权限
-FS-->>Validator : 返回文件状态
-Validator->>Exec : 执行 --help 测试
-Exec-->>Validator : 返回执行结果
-Validator-->>Validator : 自动修复权限如需要
-Validator-->>Caller : 返回验证结果
-```
-
-**图表来源**
-- [src/lib/whisper-config.ts:123-181](file://src/lib/whisper-config.ts#L123-L181)
-- [src/lib/whisper-config.ts:183-216](file://src/lib/whisper-config.ts#L183-L216)
-
-**章节来源**
-- [src/lib/whisper-config.ts:123-181](file://src/lib/whisper-config.ts#L123-L181)
-- [src/lib/whisper-config.ts:183-216](file://src/lib/whisper-config.ts#L183-L216)
 
 ### 转写封装模块（src/lib/whisper.ts）
 - 负责调用 whisper.cpp 可执行文件进行转写
@@ -330,36 +317,9 @@ Whisper-->>Caller : 返回结果并清理临时文件
 **章节来源**
 - [src/lib/whisper.ts:1-261](file://src/lib/whisper.ts#L1-L261)
 
-### 配置 API（src/app/api/whisper-config/route.ts）
-- GET /api/whisper-config：返回合并后的配置（含环境变量覆盖）
-- POST /api/whisper-config：保存配置，进行字段与类型校验，返回保存后的配置
-
-```mermaid
-sequenceDiagram
-participant Client as "设置对话框"
-participant API as "配置接口"
-participant ConfigLib as "配置管理"
-Client->>API : GET /api/whisper-config
-API->>ConfigLib : getWhisperConfig()
-ConfigLib-->>API : 返回配置
-API-->>Client : JSON 响应
-Client->>API : POST /api/whisper-config
-API->>API : 校验请求体与字段
-API->>ConfigLib : saveWhisperConfig()
-ConfigLib-->>API : 返回合并配置
-API-->>Client : JSON 响应
-```
-
-**图表来源**
-- [src/app/api/whisper-config/route.ts:10-124](file://src/app/api/whisper-config/route.ts#L10-L124)
-- [src/lib/whisper-config.ts:57-92](file://src/lib/whisper-config.ts#L57-L92)
-
-**章节来源**
-- [src/app/api/whisper-config/route.ts:1-127](file://src/app/api/whisper-config/route.ts#L1-L127)
-- [src/lib/whisper-config.ts:1-398](file://src/lib/whisper-config.ts#L1-L398)
-
 ### 状态 API（src/app/api/whisper-status/route.ts）
 - GET /api/whisper-status：返回 whisper.cpp 与模型的安装状态、模型大小与模型名推断
+- **保持不变**：服务器端状态检查，支持前端配置同步
 
 ```mermaid
 flowchart TD
@@ -393,6 +353,7 @@ BuildStatus --> Return["返回 JSON"]
 ```mermaid
 sequenceDiagram
 participant UI as "设置对话框"
+participant Hook as "useTranscriptionConfig Hook"
 participant DL as "下载接口"
 participant FS as "文件系统"
 participant HF as "Hugging Face 镜像源"
@@ -416,7 +377,7 @@ PROG-->>UI : 推送状态/进度/完成/错误
 - [src/app/api/whisper-download-progress/route.ts:45-140](file://src/app/api/whisper-download-progress/route.ts#L45-L140)
 
 **章节来源**
-- [src/app/api/whisper-download/route.ts:1-200](file://src/app/api/whisper-download/route.ts#L1-L200)
+- [src/app/api/whisper-download/route.ts:1-235](file://src/app/api/whisper-download/route.ts#L1-L235)
 - [src/app/api/whisper-download-progress/route.ts:1-137](file://src/app/api/whisper-download-progress/route.ts#L1-L137)
 
 ### whisper.cpp 安装与进度（src/app/api/whisper-install/route.ts、src/app/api/whisper-install-progress/route.ts）
@@ -431,6 +392,7 @@ PROG-->>UI : 推送状态/进度/完成/错误
 ```mermaid
 sequenceDiagram
 participant UI as "设置对话框"
+participant Hook as "useTranscriptionConfig Hook"
 participant INSTALL as "安装接口"
 participant FS as "文件系统"
 participant GIT as "Git 仓库"
@@ -450,11 +412,11 @@ PROG-->>UI : 推送状态/步骤/完成/错误
 ```
 
 **图表来源**
-- [src/app/api/whisper-install/route.ts:51-100](file://src/app/api/whisper-install/route.ts#L51-L100)
+- [src/app/api/whisper-install/route.ts:61-177](file://src/app/api/whisper-install/route.ts#L61-L177)
 - [src/app/api/whisper-install-progress/route.ts:23-100](file://src/app/api/whisper-install-progress/route.ts#L23-L100)
 
 **章节来源**
-- [src/app/api/whisper-install/route.ts:1-200](file://src/app/api/whisper-install/route.ts#L1-L200)
+- [src/app/api/whisper-install/route.ts:1-220](file://src/app/api/whisper-install/route.ts#L1-L220)
 - [src/app/api/whisper-install-progress/route.ts:1-101](file://src/app/api/whisper-install-progress/route.ts#L1-L101)
 
 ### FFmpeg 安装与进度（src/app/api/ffmpeg-install/route.ts、src/app/api/ffmpeg-install-progress/route.ts）
@@ -472,19 +434,19 @@ PROG-->>UI : 推送状态/步骤/完成/错误
 ```mermaid
 sequenceDiagram
 participant UI as "设置对话框"
-participant FFMPEG_INSTALL as "FFmpeg 安装接口"
+participant INSTALL as "FFmpeg 安装接口"
 participant FS as "文件系统"
 participant BREW as "Homebrew"
 participant PROG as "FFmpeg 安装进度接口"
-UI->>FFMPEG_INSTALL : POST /api/ffmpeg-install
-FFMPEG_INSTALL->>FS : 检查现有安装状态
-FFMPEG_INSTALL->>BREW : 检查 Homebrew 可用性
-BREW-->>FFMPEG_INSTALL : 返回可用状态
-FFMPEG_INSTALL->>FS : 写入进度文件(状态=installing)
-FFMPEG_INSTALL->>BREW : 安装 FFmpeg (可能需要几分钟)
-BREW-->>FFMPEG_INSTALL : 安装完成
-FFMPEG_INSTALL->>FS : 保存配置(更新 ffmpegPath)
-FFMPEG_INSTALL-->>UI : 返回启动结果
+UI->>INSTALL : POST /api/ffmpeg-install
+INSTALL->>FS : 检查现有安装状态
+INSTALL->>BREW : 检查 Homebrew 可用性
+BREW-->>INSTALL : 返回可用状态
+INSTALL->>FS : 写入进度文件(状态=installing)
+INSTALL->>BREW : 安装 FFmpeg (可能需要几分钟)
+BREW-->>INSTALL : 安装完成
+INSTALL->>FS : 保存配置(更新 ffmpegPath)
+INSTALL-->>UI : 返回启动结果
 UI->>PROG : 建立 SSE 连接
 PROG-->>UI : 推送状态/步骤/完成/错误
 ```
@@ -513,7 +475,7 @@ PROG-->>UI : 推送状态/步骤/完成/错误
   - 下载流程：触发下载并建立 SSE 连接跟踪进度
   - 安装流程：触发安装并建立 SSE 连接跟踪进度
   - **新增**：FFmpeg 安装流程：触发 FFmpeg 安装并建立 SSE 连接跟踪进度
-  - 配置保存：校验后提交配置
+  - 配置保存：通过 useTranscriptionConfig hook 更新配置
   - 错误处理：统一错误提示与资源清理
 
 ```mermaid
@@ -540,19 +502,21 @@ FfmpegInstallProgress --> FfmpegInstallCompleted{"FFmpeg 安装完成/错误?"}
 FfmpegInstallCompleted --> |完成| FfmpegInstallReload["重新加载状态"]
 FfmpegInstallCompleted --> |错误| FfmpegInstallShowError["显示错误"]
 Ready --> Save["保存配置"]
-Save --> Done["关闭对话框"]
+Save --> Hook["useTranscriptionConfig Hook"]
+Hook --> LocalStorage["localStorage 持久化"]
+LocalStorage --> Done["关闭对话框"]
 ```
 
 **图表来源**
-- [src/components/whisper-settings.tsx:86-120](file://src/components/whisper-settings.tsx#L86-L120)
-- [src/components/whisper-settings.tsx:130-162](file://src/components/whisper-settings.tsx#L130-L162)
-- [src/components/whisper-settings.tsx:164-197](file://src/components/whisper-settings.tsx#L164-L197)
+- [src/components/whisper-settings.tsx:240-268](file://src/components/whisper-settings.tsx#L240-L268)
+- [src/components/whisper-settings.tsx:505-519](file://src/components/whisper-settings.tsx#L505-L519)
+- [src/hooks/use-transcription-config.ts:84-148](file://src/hooks/use-transcription-config.ts#L84-L148)
 
 **章节来源**
-- [src/components/whisper-settings.tsx:1-1028](file://src/components/whisper-settings.tsx#L1-L1028)
+- [src/components/whisper-settings.tsx:1-1251](file://src/components/whisper-settings.tsx#L1-L1251)
 
 ## 依赖关系分析
-- 类型定义：WhisperConfig、WhisperStatus、ApiResponse
+- 类型定义：WhisperConfig、WhisperStatus、ApiResponse、TranscriptionConfig
 - 运行时依赖：Node.js fs/path/child_process，Next.js API 路由
 - 第三方依赖：React、Radix UI 组件库、Tailwind CSS
 
@@ -573,23 +537,25 @@ Settings --> InstallProgressAPI["安装进度接口"]
 Settings --> FfmpegInstallAPI["FFmpeg 安装接口"]
 Settings --> FfmpegInstallProgressAPI["FFmpeg 安装进度接口"]
 Settings --> RetranscribeAPI
+Settings --> Hook["useTranscriptionConfig Hook"]
 ConfigLib --> WhisperLib["转写封装"]
 DownloadAPI --> ConfigLib
 InstallAPI --> ConfigLib
 FfmpegInstallAPI --> ConfigLib
 RetranscribeAPI --> ConfigLib
+Hook --> LocalStorage["localStorage"]
 ```
 
 **图表来源**
-- [src/types/index.ts:1-46](file://src/types/index.ts#L1-L46)
-- [src/app/api/whisper-config/route.ts:1-127](file://src/app/api/whisper-config/route.ts#L1-L127)
+- [src/types/index.ts:1-67](file://src/types/index.ts#L1-L67)
 - [src/app/api/whisper-status/route.ts:1-66](file://src/app/api/whisper-status/route.ts#L1-L66)
-- [src/components/whisper-settings.tsx:1-1028](file://src/components/whisper-settings.tsx#L1-L1028)
+- [src/components/whisper-settings.tsx:1-1251](file://src/components/whisper-settings.tsx#L1-L1251)
+- [src/hooks/use-transcription-config.ts:1-148](file://src/hooks/use-transcription-config.ts#L1-L148)
 - [src/lib/whisper-config.ts:1-398](file://src/lib/whisper-config.ts#L1-L398)
 - [src/lib/whisper.ts:1-261](file://src/lib/whisper.ts#L1-L261)
 
 **章节来源**
-- [src/types/index.ts:1-46](file://src/types/index.ts#L1-L46)
+- [src/types/index.ts:1-67](file://src/types/index.ts#L1-L67)
 - [package.json:1-37](file://package.json#L1-L37)
 
 ## 性能考虑
@@ -598,9 +564,9 @@ RetranscribeAPI --> ConfigLib
 - 下载性能：使用流式读取与定期进度更新，避免频繁磁盘写入；完成后一次性更新配置
 - 转写性能：合理设置线程数与模型大小，避免过度占用系统资源
 - 安装性能：编译过程可能耗时较长，建议在空闲时段进行
-- **新增**：可执行文件验证仅在必要时进行，避免重复验证影响性能
-- **新增**：SSE 连接采用 1 秒轮询间隔，平衡实时性和资源消耗
-- **新增**：安装进度文件采用 JSON 格式，便于快速读取和解析
+- **新增**：localStorage 配置缓存：useTranscriptionConfig hook 自动缓存配置到内存，减少重复读取
+- **新增**：SSR 兼容性：在服务器端渲染环境下返回默认配置，避免客户端特定 API 访问
+- **新增**：配置同步延迟：useTranscriptionConfig hook 在配置变更时有轻微延迟，避免频繁 localStorage 写入
 
 ## 故障排除指南
 - 无法找到 whisper.cpp：
@@ -619,6 +585,18 @@ RetranscribeAPI --> ConfigLib
   - 现象：进度停留在 cloning 或 compiling，最终 error
   - 处理：检查网络连接和编译工具，清理进度文件后重试
   - 参考：[src/app/api/whisper-install/route.ts:91-99](file://src/app/api/whisper-install/route.ts#L91-L99)
+- **新增**：localStorage 配置丢失：
+  - 现象：刷新页面后配置消失
+  - 处理：检查浏览器隐私设置，确认允许使用 localStorage；查看浏览器开发者工具的 Application 面板
+  - 参考：[src/hooks/use-transcription-config.ts:63-71](file://src/hooks/use-transcription-config.ts#L63-L71)
+- **新增**：配置同步失败：
+  - 现象：前端显示的配置与实际不一致
+  - 处理：检查 useTranscriptionConfig hook 的初始化，确认组件正确挂载；查看浏览器控制台错误
+  - 参考：[src/hooks/use-transcription-config.ts:89-92](file://src/hooks/use-transcription-config.ts#L89-L92)
+- **新增**：SSR 环境下配置异常：
+  - 现象：服务器端渲染时配置行为异常
+  - 处理：useTranscriptionConfig hook 会在 SSR 环境下返回默认配置，这是预期行为
+  - 参考：[src/hooks/use-transcription-config.ts:41-43](file://src/hooks/use-transcription-config.ts#L41-L43)
 - **新增**：FFmpeg 安装失败：
   - 现象：FFmpeg 安装进度停留在 installing，最终 error
   - 处理：检查 Homebrew 可用性，清理锁文件后重试；参考错误信息中的具体解决方案
@@ -648,6 +626,8 @@ RetranscribeAPI --> ConfigLib
 - [setup-whisper.sh:1-47](file://setup-whisper.sh#L1-L47)
 - [src/app/api/whisper-download/route.ts:147-166](file://src/app/api/whisper-download/route.ts#L147-L166)
 - [src/app/api/whisper-install/route.ts:91-99](file://src/app/api/whisper-install/route.ts#L91-L99)
+- [src/hooks/use-transcription-config.ts:63-71](file://src/hooks/use-transcription-config.ts#L63-L71)
+- [src/hooks/use-transcription-config.ts:41-43](file://src/hooks/use-transcription-config.ts#L41-L43)
 - [src/app/api/ffmpeg-install/route.ts:147-154](file://src/app/api/ffmpeg-install/route.ts#L147-L154)
 - [src/app/api/whisper-config/route.ts:59-96](file://src/app/api/whisper-config/route.ts#L59-L96)
 - [src/lib/whisper.ts:103-108](file://src/lib/whisper.ts#L103-L108)
@@ -655,17 +635,13 @@ RetranscribeAPI --> ConfigLib
 - [src/lib/whisper-config.ts:183-216](file://src/lib/whisper-config.ts#L183-L216)
 
 ## 结论
-本 Whisper 配置管理系统提供了完善的本地语音识别模型配置、下载与状态管理能力。通过 API 路由与前端对话框的配合，用户可以便捷地完成模型选择、下载与配置保存；底层封装保证了转写流程的稳定性与可维护性。
+本 Whisper 配置管理系统经过重大架构升级，完全迁移到客户端 localStorage 配置管理模式。通过 useTranscriptionConfig hook 提供了统一的多引擎配置结构，支持本地 Whisper 和在线 ASR 引擎的无缝切换。服务器端 API 专注于提供必要的状态检查和下载服务，实现了前后端职责的清晰分离。
 
-**重大增强特性**：
-- **可执行文件验证系统**：新增 isValidWhisperExecutable 函数，提供完整的可执行文件验证机制，包括权限检查、功能测试和自动修复
-- **优化的执行环境配置**：新增 getWhisperExecutionOptions 函数，智能配置 PATH 环境变量和动态库路径，支持多平台部署
-- **扩展的 PATH 处理**：支持 /usr/local/bin、/opt/homebrew/bin、/opt/homebrew/sbin 等多平台路径，提高可执行文件查找成功率
-- **动态库路径自动配置**：自动检测并配置 src、ggml、ggml-blas、ggml-metal 等目录，解决 macOS 和 Linux 系统的动态库加载问题
-- **智能权限修复**：可执行文件权限不足时自动尝试修复，提升系统健壮性
-- **新增**：完整的安装进度监控系统，支持 Whisper 和 FFmpeg 的实时进度跟踪
-- **新增**：SSE 连接管理改进，提供更稳定的实时通信和资源清理机制
-- **新增**：FFmpeg 安装进度接口，提供独立的安装状态监控和错误诊断
-- **新增**：双进度监控架构，支持分阶段状态跟踪和错误恢复
+**重大架构变更**：
+- **完全客户端配置管理**：useTranscriptionConfig hook 替代服务器端配置 API，使用 localStorage 实现配置持久化
+- **统一多引擎配置结构**：支持本地 Whisper 和在线 ASR 引擎的统一管理，提供更好的用户体验
+- **SSR 兼容性**：在服务器端渲染环境下自动降级为默认配置，确保应用的稳定性
+- **配置同步机制**：前端与后端的协同工作，前端负责配置管理，后端负责状态检查和下载服务
+- **增强的错误处理**：localStorage 配置丢失、SSR 环境下的配置异常等场景的优雅处理
 
-建议在生产环境中结合实际硬件条件调整线程数与模型大小，并完善日志与监控以便快速定位问题。新的配置管理系统显著提升了在不同环境中的可靠性，为用户提供了更加稳定和易用的体验。
+建议在生产环境中结合实际硬件条件调整线程数与模型大小，并完善日志与监控以便快速定位问题。新的配置管理系统显著提升了在不同环境中的可靠性，为用户提供了更加稳定和易用的体验。localStorage 配置管理方案不仅简化了部署复杂度，还提高了应用的响应速度和用户体验。

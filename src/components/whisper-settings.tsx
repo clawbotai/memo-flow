@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { WhisperConfig, WhisperStatus, TranscriptionEngineType, OnlineASRConfig } from "@/types";
+import { WhisperConfig, WhisperStatus, TranscriptionEngineType } from "@/types";
 import { useTranscriptionConfig } from "@/hooks/use-transcription-config";
 
 interface WhisperSettingsProps {
