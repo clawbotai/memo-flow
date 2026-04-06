@@ -10,6 +10,7 @@ import { Copy, Check, ChevronDown, FileText, Clock } from 'lucide-react';
 import type { TranscribeSegment } from '@/types';
 import { TranscriptionRecord } from '@/types/transcription-history';
 import { useTranscriptionConfig } from '@/hooks/use-transcription-config';
+import { upsertCachedTranscriptionRecord } from '@/lib/transcription-browser-cache';
 
 interface TranscriptionDetailProps {
   record: TranscriptionRecord;
@@ -80,6 +81,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
           const payload = JSON.parse(event.data);
           if (payload.success && payload.data) {
             setLiveRecord(payload.data);
+            upsertCachedTranscriptionRecord(payload.data);
             scrollToBottom();
 
             if (payload.data.status === 'completed' || payload.data.status === 'error') {
@@ -142,7 +144,18 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
         segments: [],
         transcript: undefined,
         wordCount: undefined,
+        error: undefined,
       }));
+      upsertCachedTranscriptionRecord({
+        ...liveRecord,
+        status: 'downloading_audio',
+        progress: 0,
+        segments: [],
+        transcript: undefined,
+        wordCount: undefined,
+        error: undefined,
+        updatedAt: new Date(),
+      });
 
       // 延迟一点点再重连 SSE，等待服务端进度文件初始化
       setTimeout(() => {
@@ -154,6 +167,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
             const payload = JSON.parse(event.data);
             if (payload.success && payload.data) {
               setLiveRecord(payload.data);
+              upsertCachedTranscriptionRecord(payload.data);
               scrollToBottom();
               if (payload.data.status === 'completed' || payload.data.status === 'error') {
                 doneRef.current = true;
@@ -180,7 +194,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
     } finally {
       setRetranscribing(false);
     }
-  }, [record.id, scrollToBottom]);
+  }, [config, liveRecord, record.id, scrollToBottom]);
 
   const status = liveRecord.status;
   const segments: TranscribeSegment[] = liveRecord.segments ?? [];
@@ -337,7 +351,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
             {/* 错误信息 */}
             {status === 'error' && (
               <div className="bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-xs p-3 rounded-lg">
-                转录失败，请检查网络和音频链接后重试。
+                {liveRecord.error || '转录失败，请检查网络和音频链接后重试。'}
               </div>
             )}
 

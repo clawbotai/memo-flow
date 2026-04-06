@@ -8,6 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Mic, History, FileSearch, Library } from 'lucide-react';
 import { TranscriptionRecord } from '@/types/transcription-history';
 import TranscriptionCard from '@/components/transcription-card';
+import {
+  mergeCachedTranscriptionHistory,
+  readCachedTranscriptionHistory,
+} from '@/lib/transcription-browser-cache';
 
 export default function Home() {
   const [recentRecords, setRecentRecords] = useState<TranscriptionRecord[]>([]);
@@ -23,15 +27,18 @@ export default function Home() {
         const response = await fetch('/api/transcription-history');
         const result = await response.json();
         if (result.success) {
-          const sorted = result.data
+          const sorted = mergeCachedTranscriptionHistory(result.data)
             .sort((a: TranscriptionRecord, b: TranscriptionRecord) =>
               new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
             )
             .slice(0, 3);
           setRecentRecords(sorted);
+        } else {
+          setRecentRecords(readCachedTranscriptionHistory().slice(0, 3));
         }
       } catch (error) {
         console.error('获取最近转录失败:', error);
+        setRecentRecords(readCachedTranscriptionHistory().slice(0, 3));
       } finally {
         setLoading(false);
       }

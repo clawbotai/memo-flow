@@ -278,6 +278,7 @@ async function processWithQwenASR(
     status: 'transcribing',
     progress: 30,
     transcript: '',
+    error: undefined,
   });
 
   let accumulatedText = '';
@@ -384,6 +385,7 @@ async function processWithQwenASR(
     language: 'zh',
     savedPath,
     segments: finalSegments,
+    error: undefined,
   });
 }
 
@@ -439,6 +441,7 @@ async function processInBackground(taskId: string, url: string, engineOptions: E
       await updateTaskRecord(taskId, {
         status: 'error',
         progress: null,
+        error: '未能从小宇宙播客中提取到音频链接',
       });
       return;
     }
@@ -448,6 +451,7 @@ async function processInBackground(taskId: string, url: string, engineOptions: E
     await updateTaskRecord(taskId, {
       title: episodeInfo.title,
       audioUrl,
+      error: undefined,
     });
     throwIfTranscriptionTaskCancelled(taskId);
 
@@ -506,6 +510,7 @@ async function processInBackground(taskId: string, url: string, engineOptions: E
       await updateTaskRecord(taskId, {
         status: 'error',
         progress: null,
+        error: '无法下载音频文件',
       });
       return;
     }
@@ -589,6 +594,7 @@ async function processInBackground(taskId: string, url: string, engineOptions: E
       status: 'transcribing',
       progress: currentProgress,
       transcript: '',
+      error: undefined,
     });
 
     const { timedOut } = await runWhisperStreaming(
@@ -679,6 +685,7 @@ async function processInBackground(taskId: string, url: string, engineOptions: E
       language: 'zh',
       savedPath,
       segments: finalSegments,
+      error: undefined,
     });
   } catch (error) {
     if (isTranscriptionTaskCancelledError(error) || isTranscriptionTaskCancelled(taskId)) {
@@ -695,6 +702,7 @@ async function processInBackground(taskId: string, url: string, engineOptions: E
     await updateTaskRecord(taskId, {
       status: 'error',
       progress: null,
+      error: error instanceof Error ? error.message : '处理播客失败',
     });
   } finally {
     clearTranscriptionTaskResource(taskId, 'fetchController');

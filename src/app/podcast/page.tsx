@@ -13,6 +13,12 @@ import TranscriptionCard from '@/components/transcription-card';
 import { TranscriptionRecord } from '@/types/transcription-history';
 import type { TranscribeProgress, TranscribeSegment } from '@/types';
 import { useTranscriptionConfig } from '@/hooks/use-transcription-config';
+import {
+  mergeCachedTranscriptionHistory,
+  readCachedTranscriptionHistory,
+  removeCachedTranscriptionRecord,
+  upsertCachedTranscriptionRecord,
+} from '@/lib/transcription-browser-cache';
 
 type PodcastAudioInfo = {
   audioUrl: string;
@@ -59,16 +65,14 @@ export default function PodcastPage() {
         const result = await response.json();
 
         if (result.success) {
-          // 按照更新时间排序，最新的在前
-          const sortedRecords = result.data.sort((a: TranscriptionRecord, b: TranscriptionRecord) =>
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-          );
-          setTranscriptionHistory(sortedRecords);
+          setTranscriptionHistory(mergeCachedTranscriptionHistory(result.data));
         } else {
           console.error('加载转录历史失败:', result.error);
+          setTranscriptionHistory(readCachedTranscriptionHistory());
         }
       } catch (error) {
         console.error('获取转录历史失败:', error);
+        setTranscriptionHistory(readCachedTranscriptionHistory());
       } finally {
         setHistoryLoading(false);
       }
@@ -92,14 +96,13 @@ export default function PodcastPage() {
           const result = await response.json();
 
           if (result.success) {
-            // 按照更新时间排序，最新的在前
-            const sortedRecords = result.data.sort((a: TranscriptionRecord, b: TranscriptionRecord) =>
-              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-            );
-            setTranscriptionHistory(sortedRecords);
+            setTranscriptionHistory(mergeCachedTranscriptionHistory(result.data));
+          } else {
+            setTranscriptionHistory(readCachedTranscriptionHistory());
           }
         } catch (error) {
           console.error('刷新转录历史失败:', error);
+          setTranscriptionHistory(readCachedTranscriptionHistory());
         }
       };
 
@@ -185,6 +188,24 @@ export default function PodcastPage() {
             language: 'zh',
           });
         }
+
+        const cachedRecord = upsertCachedTranscriptionRecord({
+          id: currentTaskId,
+          taskId: currentTaskId,
+          title: data.episodeTitle || episodeTitle || '未知标题',
+          status: data.status,
+          progress: data.progress ?? null,
+          segments: data.segments || [],
+          transcript: data.transcript,
+          audioUrl: data.audioUrl,
+          wordCount: data.wordCount,
+          language: data.language,
+          savedPath: data.savedPath,
+          error: data.error,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        setTranscriptionHistory(cachedRecord);
 
         if (data.status === 'completed') {
           transcribeFinishedRef.current = true;
@@ -322,6 +343,16 @@ export default function PodcastPage() {
       setTaskId(newTaskId);
       setTranscribeStage('准备中...');
       setTranscribeStatus('idle');
+      setTranscriptionHistory(upsertCachedTranscriptionRecord({
+        id: newTaskId,
+        taskId: newTaskId,
+        title: '未知标题',
+        status: 'idle',
+        progress: 0,
+        segments: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
 
       // 打开 SSE 连接监听转录进度
       connectToTranscribeProgress(newTaskId);
@@ -336,7 +367,7 @@ export default function PodcastPage() {
   }, [closeEventSource, connectToTranscribeProgress, isLoading, podcastUrl]);
 
   const handleRecordDeleted = useCallback((recordId: string) => {
-    setTranscriptionHistory((prev) => prev.filter((record) => record.id !== recordId));
+    setTranscriptionHistory(removeCachedTranscriptionRecord(recordId));
 
     if (taskId === recordId || activeTaskIdRef.current === recordId) {
       resetActiveTaskState();

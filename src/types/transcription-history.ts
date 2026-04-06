@@ -11,6 +11,7 @@ export interface TranscriptionRecord {
   transcript?: string;         // 完整转录文本
   wordCount?: number;          // 字数统计
   savedPath?: string;          // 文件保存路径
+  error?: string;              // 错误信息
   createdAt: Date;             // 创建时间
   updatedAt: Date;             // 最后更新时间
   language?: string;           // 检测到的语言

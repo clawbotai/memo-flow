@@ -14,6 +14,8 @@ import {
 import { getProgressFilePath } from '@/lib/transcription-progress';
 import { getWhisperConfig, resolveWhisperConfigPaths } from '@/lib/whisper-config';
 
+export const dynamic = 'force-dynamic';
+
 async function safeDeleteFile(filePath: string | undefined) {
   if (!filePath) {
     return false;

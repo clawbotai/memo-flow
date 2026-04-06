@@ -1109,11 +1109,11 @@ function TranscriptionEnginePanel({ visible }: { visible: boolean }) {
               <label className="text-xs font-medium">模型</label>
               <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2.5">
                 <Globe className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Qwen3-ASR-Flash</span>
-                <span className="ml-auto text-xs text-muted-foreground">快速识别</span>
+                <span className="text-sm">Qwen3-ASR-Flash-Filetrans</span>
+                <span className="ml-auto text-xs text-muted-foreground">长音频转写</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                目前支持 Qwen3-ASR-Flash 模型，后续将支持更多模型。
+                默认使用适合播客场景的长音频异步模型；如果短音频识别失败，服务端也会自动回退到长音频接口。
               </p>
             </div>
 

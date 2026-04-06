@@ -21,7 +21,7 @@ const DEFAULT_WHISPER_CONFIG: WhisperConfig = {
 
 const DEFAULT_ONLINE_ASR_CONFIG: OnlineASRConfig = {
   provider: "qwen",
-  modelName: "qwen3-asr-flash",
+  modelName: "qwen3-asr-flash-filetrans",
   apiKey: "",
   baseUrl: "https://dashscope.aliyuncs.com/api/v1",
   enableITN: true,
@@ -47,10 +47,15 @@ export function getStoredTranscriptionConfig(): TranscriptionConfig {
     if (!stored) return DEFAULT_CONFIG;
 
     const parsed = JSON.parse(stored) as Partial<TranscriptionConfig>;
+    const storedOnlineASR = { ...DEFAULT_ONLINE_ASR_CONFIG, ...parsed.onlineASR };
+    if (storedOnlineASR.modelName === "qwen3-asr-flash") {
+      storedOnlineASR.modelName = DEFAULT_ONLINE_ASR_CONFIG.modelName;
+    }
+
     return {
       activeEngine: parsed.activeEngine ?? DEFAULT_CONFIG.activeEngine,
       whisper: { ...DEFAULT_WHISPER_CONFIG, ...parsed.whisper },
-      onlineASR: { ...DEFAULT_ONLINE_ASR_CONFIG, ...parsed.onlineASR },
+      onlineASR: storedOnlineASR,
     };
   } catch {
     return DEFAULT_CONFIG;

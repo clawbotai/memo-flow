@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { TranscriptionRecord } from '@/types/transcription-history';
+import { removeCachedTranscriptionRecord } from '@/lib/transcription-browser-cache';
 
 interface TranscriptionCardProps {
   record: TranscriptionRecord;
@@ -81,11 +82,12 @@ const TranscriptionCard: React.FC<TranscriptionCardProps> = ({ record, onDeleted
       });
       const result = await response.json();
 
-      if (!result.success) {
+      if (!result.success && result.error !== '转录记录不存在') {
         setDeleteError(result.error || '删除失败，请重试');
         return;
       }
 
+      removeCachedTranscriptionRecord(record.id);
       setDeleteOpen(false);
 
       if (onDeleted) {

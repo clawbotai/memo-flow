@@ -292,6 +292,7 @@ async function retranscribeInBackground(
         status: 'transcribing',
         progress: 30,
         transcript: '',
+        error: undefined,
       });
 
       let accumulatedText = '';
@@ -366,6 +367,7 @@ async function retranscribeInBackground(
         language: 'zh',
         savedPath,
         segments: finalSegments,
+        error: undefined,
       });
       return;
     }
@@ -406,7 +408,11 @@ async function retranscribeInBackground(
         episodeTitle: title,
         error: '无法下载音频文件',
       });
-      await updateTaskRecord(taskId, { status: 'error', progress: null });
+      await updateTaskRecord(taskId, {
+        status: 'error',
+        progress: null,
+        error: '无法下载音频文件',
+      });
       return;
     }
 
@@ -488,6 +494,7 @@ async function retranscribeInBackground(
       status: 'transcribing',
       progress: currentProgress,
       transcript: '',
+      error: undefined,
     });
 
     const { timedOut } = await runWhisperStreaming(
@@ -573,6 +580,7 @@ async function retranscribeInBackground(
       language: 'zh',
       savedPath,
       segments: finalSegments,
+      error: undefined,
     });
   } catch (error) {
     if (isTranscriptionTaskCancelledError(error) || isTranscriptionTaskCancelled(taskId)) {
@@ -588,6 +596,7 @@ async function retranscribeInBackground(
     await updateTaskRecord(taskId, {
       status: 'error',
       progress: null,
+      error: error instanceof Error ? error.message : '重新转录失败',
     });
   } finally {
     clearTranscriptionTaskResource(taskId, 'downloadController');

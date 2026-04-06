@@ -5,6 +5,8 @@ import {
 import { existsSync, readFileSync } from 'fs';
 import { getProgressFilePath } from '@/lib/transcription-progress';
 
+export const dynamic = 'force-dynamic';
+
 /** 合并进度文件数据到记录中 */
 function mergeProgressFile(record: Record<string, unknown>, taskId: string): Record<string, unknown> {
   const progressFilePath = getProgressFilePath(taskId);

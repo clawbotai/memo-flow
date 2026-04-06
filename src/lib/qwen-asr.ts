@@ -1,20 +1,15 @@
 /**
- * 千问 Qwen3-ASR-Flash 在线语音识别模块
+ * 千问 Qwen ASR 在线语音识别模块
  *
- * 通过 DashScope multimodal-generation API 进行音频转录。
- * 支持 SSE 流式输出，实时返回转录结果。
+ * - `qwen3-asr-flash` 适合 5 分钟内短音频，支持 SSE 流式输出
+ * - `qwen3-asr-flash-filetrans` 适合长音频，使用异步任务轮询
  */
 
-import type { TranscribeSegment, OnlineASRConfig } from "@/types";
-
-// ─── 类型定义 ───
+import type { OnlineASRConfig, TranscribeSegment } from '@/types';
 
 interface QwenASRCallbacks {
-  /** 收到新的转录文本片段时回调 */
   onText: (text: string) => void;
-  /** 进度更新（0-100） */
   onProgress: (percent: number) => void;
-  /** 错误回调 */
   onError?: (error: Error) => void;
 }
 
@@ -36,26 +31,62 @@ interface DashScopeSSEData {
     }>;
     finish_reason?: string;
   };
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-  };
   request_id?: string;
   code?: string;
   message?: string;
 }
 
-// ─── 核心实现 ───
+interface DashScopeTaskSubmitResponse {
+  output?: {
+    task_id?: string;
+  };
+  code?: string;
+  message?: string;
+}
 
-/**
- * 使用千问 ASR 模型进行在线转录（SSE 流式）
- *
- * @param audioUrl 公网可访问的音频文件 URL
- * @param config 在线 ASR 配置（API Key 等）
- * @param callbacks 回调函数
- * @param abortSignal 取消信号
- * @returns 转录结果
- */
+interface DashScopeTaskQueryResponse {
+  output?: {
+    task_status?: string;
+    code?: string;
+    message?: string;
+    result?: {
+      transcription_url?: string;
+    };
+  };
+  code?: string;
+  message?: string;
+}
+
+interface DashScopeSentence {
+  text?: string;
+  begin_time?: number;
+  end_time?: number;
+  sentence_begin_time?: number;
+  sentence_end_time?: number;
+}
+
+interface DashScopeTranscriptItem {
+  text?: string;
+  sentences?: DashScopeSentence[];
+}
+
+class DashScopeApiError extends Error {
+  status?: number;
+  code?: string;
+
+  constructor(message: string, options?: { status?: number; code?: string }) {
+    super(message);
+    this.name = 'DashScopeApiError';
+    this.status = options?.status;
+    this.code = options?.code;
+  }
+}
+
+const FILETRANS_MODEL = 'qwen3-asr-flash-filetrans';
+const DEFAULT_FLASH_MODEL = 'qwen3-asr-flash';
+const FILETRANS_POLL_INTERVAL_MS = 2000;
+const FILETRANS_TIMEOUT_MS = 20 * 60 * 1000;
+
 export async function transcribeWithQwenASR(
   audioUrl: string,
   config: OnlineASRConfig,
@@ -63,17 +94,52 @@ export async function transcribeWithQwenASR(
   abortSignal?: AbortSignal,
 ): Promise<QwenASRResult> {
   if (!config.apiKey) {
-    throw new Error("千问 ASR API Key 未配置，请在设置中填写");
+    throw new Error('千问 ASR API Key 未配置，请在设置中填写');
   }
 
-  const apiEndpoint = `${config.baseUrl}/services/aigc/multimodal-generation/generation`;
+  const requestedModel = (config.modelName || FILETRANS_MODEL).trim();
 
+  if (requestedModel === FILETRANS_MODEL) {
+    return transcribeWithQwenFileTrans(audioUrl, config, callbacks, abortSignal);
+  }
+
+  try {
+    return await transcribeWithQwenFlash(audioUrl, config, callbacks, abortSignal);
+  } catch (error) {
+    if (shouldFallbackToFileTrans(error, requestedModel)) {
+      callbacks.onProgress(10);
+      return transcribeWithQwenFileTrans(
+        audioUrl,
+        {
+          ...config,
+          modelName: FILETRANS_MODEL,
+        },
+        callbacks,
+        abortSignal,
+      );
+    }
+
+    throw error;
+  }
+}
+
+async function transcribeWithQwenFlash(
+  audioUrl: string,
+  config: OnlineASRConfig,
+  callbacks: QwenASRCallbacks,
+  abortSignal?: AbortSignal,
+): Promise<QwenASRResult> {
+  const apiEndpoint = `${normalizeBaseUrl(config.baseUrl)}/services/aigc/multimodal-generation/generation`;
   const requestBody = {
-    model: config.modelName || "qwen3-asr-flash",
+    model: config.modelName || DEFAULT_FLASH_MODEL,
     input: {
       messages: [
         {
-          role: "user",
+          role: 'system',
+          content: [{ text: '' }],
+        },
+        {
+          role: 'user',
           content: [{ audio: audioUrl }],
         },
       ],
@@ -87,38 +153,144 @@ export async function transcribeWithQwenASR(
   };
 
   const response = await fetch(apiEndpoint, {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-      "X-DashScope-SSE": "enable",
+      'Content-Type': 'application/json',
+      'X-DashScope-SSE': 'enable',
     },
     body: JSON.stringify(requestBody),
     signal: abortSignal,
   });
 
   if (!response.ok) {
-    let errorMessage = `千问 ASR API 请求失败 (${response.status})`;
-    try {
-      const errorBody = await response.json();
-      if (errorBody.message) {
-        errorMessage = `千问 ASR: ${errorBody.message}`;
-      } else if (errorBody.error?.message) {
-        errorMessage = `千问 ASR: ${errorBody.error.message}`;
-      }
-    } catch {
-      // ignore parse error
-    }
-    throw new Error(errorMessage);
+    throw await buildDashScopeApiError(response);
   }
 
-  // 解析 SSE 流
   return parseSSEStream(response, callbacks, abortSignal);
 }
 
-/**
- * 解析 DashScope SSE 流式响应
- */
+async function transcribeWithQwenFileTrans(
+  audioUrl: string,
+  config: OnlineASRConfig,
+  callbacks: QwenASRCallbacks,
+  abortSignal?: AbortSignal,
+): Promise<QwenASRResult> {
+  const baseUrl = normalizeBaseUrl(config.baseUrl);
+  const submitResponse = await fetch(`${baseUrl}/services/audio/asr/transcription`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+      'X-DashScope-Async': 'enable',
+    },
+    body: JSON.stringify({
+      model: FILETRANS_MODEL,
+      input: {
+        file_url: audioUrl,
+      },
+      parameters: {
+        channel_id: [0],
+        enable_itn: config.enableITN ?? true,
+        enable_words: true,
+      },
+    }),
+    signal: abortSignal,
+  });
+
+  if (!submitResponse.ok) {
+    throw await buildDashScopeApiError(submitResponse);
+  }
+
+  const submitPayload = (await submitResponse.json()) as DashScopeTaskSubmitResponse;
+  const taskId = submitPayload.output?.task_id;
+
+  if (!taskId) {
+    throw new Error(submitPayload.message || '千问 ASR 任务提交失败，未返回 task_id');
+  }
+
+  callbacks.onProgress(15);
+
+  const startedAt = Date.now();
+  let queryProgress = 20;
+
+  while (true) {
+    if (abortSignal?.aborted) {
+      return { segments: [], transcript: '', cancelled: true };
+    }
+
+    if (Date.now() - startedAt > FILETRANS_TIMEOUT_MS) {
+      throw new Error('千问 ASR 长音频转录超时，请稍后重试');
+    }
+
+    await sleep(FILETRANS_POLL_INTERVAL_MS, abortSignal);
+
+    const queryResponse = await fetch(`${baseUrl}/tasks/${taskId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+        'X-DashScope-Async': 'enable',
+      },
+      signal: abortSignal,
+    });
+
+    if (!queryResponse.ok) {
+      throw await buildDashScopeApiError(queryResponse);
+    }
+
+    const queryPayload = (await queryResponse.json()) as DashScopeTaskQueryResponse;
+    const status = (queryPayload.output?.task_status || '').toUpperCase();
+    const code = queryPayload.output?.code || queryPayload.code;
+    const message = queryPayload.output?.message || queryPayload.message;
+
+    if (code) {
+      throw new DashScopeApiError(
+        `千问 ASR 错误 [${code}]: ${message || '未知错误'}`,
+        { code },
+      );
+    }
+
+    if (status === 'FAILED' || status === 'CANCELED') {
+      throw new Error(message || '千问 ASR 长音频转录失败');
+    }
+
+    if (status === 'SUCCEEDED') {
+      callbacks.onProgress(90);
+
+      const transcriptionUrl = queryPayload.output?.result?.transcription_url;
+      if (!transcriptionUrl) {
+        throw new Error('千问 ASR 转录完成，但未返回 transcription_url');
+      }
+
+      const resultResponse = await fetch(transcriptionUrl, {
+        signal: abortSignal,
+      });
+
+      if (!resultResponse.ok) {
+        throw new Error(`下载千问 ASR 转录结果失败 (${resultResponse.status})`);
+      }
+
+      const resultPayload = (await resultResponse.json()) as unknown;
+      const { transcript, segments } = buildResultFromFileTransPayload(resultPayload);
+
+      if (transcript) {
+        callbacks.onText(transcript);
+      }
+      callbacks.onProgress(100);
+
+      return {
+        transcript,
+        segments,
+        cancelled: false,
+      };
+    }
+
+    queryProgress = Math.min(queryProgress + 8, 80);
+    callbacks.onProgress(queryProgress);
+  }
+}
+
 async function parseSSEStream(
   response: Response,
   callbacks: QwenASRCallbacks,
@@ -126,13 +298,13 @@ async function parseSSEStream(
 ): Promise<QwenASRResult> {
   const reader = response.body?.getReader();
   if (!reader) {
-    throw new Error("无法读取响应流");
+    throw new Error('无法读取响应流');
   }
 
   const decoder = new TextDecoder();
-  let buffer = "";
-  let fullTranscript = "";
-  let lastEventId = "";
+  let buffer = '';
+  let fullTranscript = '';
+  let lastEventId = '';
   let cancelled = false;
 
   try {
@@ -143,75 +315,78 @@ async function parseSSEStream(
       }
 
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        break;
+      }
 
       buffer += decoder.decode(value, { stream: true });
-
-      // SSE 格式：以 \n\n 分隔事件
-      const events = buffer.split("\n\n");
-      buffer = events.pop() || ""; // 保留未完成的最后一块
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
 
       for (const event of events) {
-        if (!event.trim()) continue;
+        if (!event.trim()) {
+          continue;
+        }
 
-        const lines = event.split("\n");
-        let eventData = "";
-        let eventId = "";
+        const lines = event.split('\n');
+        let eventData = '';
+        let eventId = '';
 
         for (const line of lines) {
-          if (line.startsWith("data:")) {
+          if (line.startsWith('data:')) {
             eventData += line.slice(5).trim();
-          } else if (line.startsWith("id:")) {
+          } else if (line.startsWith('id:')) {
             eventId = line.slice(3).trim();
           }
         }
 
-        if (!eventData) continue;
+        if (!eventData) {
+          continue;
+        }
 
-        // 跳过重复 event id
-        if (eventId && eventId === lastEventId) continue;
-        if (eventId) lastEventId = eventId;
+        if (eventId && eventId === lastEventId) {
+          continue;
+        }
+        if (eventId) {
+          lastEventId = eventId;
+        }
 
         try {
-          const parsed: DashScopeSSEData = JSON.parse(eventData);
+          const parsed = JSON.parse(eventData) as DashScopeSSEData;
 
-          // 检查 API 错误
           if (parsed.code) {
             const error = new Error(
-              `千问 ASR 错误 [${parsed.code}]: ${parsed.message || "未知错误"}`,
+              `千问 ASR 错误 [${parsed.code}]: ${parsed.message || '未知错误'}`,
             );
             callbacks.onError?.(error);
             throw error;
           }
 
-          // 提取转录文本
           const choices = parsed.output?.choices;
-          if (choices && choices.length > 0) {
-            const content = choices[0].message?.content;
-            if (content && content.length > 0 && content[0].text) {
-              const newText = content[0].text;
+          if (!choices?.length) {
+            continue;
+          }
 
-              // incremental_output 模式下，每次返回的是增量文本
-              fullTranscript += newText;
-              callbacks.onText(newText);
-            }
+          const content = choices[0].message?.content;
+          if (content?.length && content[0].text) {
+            const newText = content[0].text;
+            fullTranscript += newText;
+            callbacks.onText(newText);
+          }
 
-            // 检查是否完成
-            const finishReason =
-              choices[0].finish_reason || parsed.output?.finish_reason;
-            if (finishReason === "stop") {
-              callbacks.onProgress(100);
-            }
+          const finishReason = choices[0].finish_reason || parsed.output?.finish_reason;
+          if (finishReason === 'stop') {
+            callbacks.onProgress(100);
           }
         } catch (parseError) {
           if (
             parseError instanceof Error &&
-            parseError.message.startsWith("千问 ASR 错误")
+            parseError.message.startsWith('千问 ASR 错误')
           ) {
             throw parseError;
           }
-          // 忽略无法解析的 SSE 数据行（如注释行）
-          console.warn("SSE 数据解析失败，跳过:", eventData.slice(0, 100), parseError);
+
+          console.warn('SSE 数据解析失败，跳过:', eventData.slice(0, 100), parseError);
         }
       }
     }
@@ -219,9 +394,7 @@ async function parseSSEStream(
     reader.releaseLock();
   }
 
-  // 将完整转录文本转为 segments 格式
   const segments = buildSegmentsFromTranscript(fullTranscript);
-
   return {
     segments,
     transcript: fullTranscript.trim(),
@@ -229,34 +402,137 @@ async function parseSSEStream(
   };
 }
 
-/**
- * 将纯文本转录结果转为 TranscribeSegment[] 格式
- * 在线 ASR 可能不提供精确时间戳，按段落拆分并生成估算时间戳
- */
-function buildSegmentsFromTranscript(
-  transcript: string,
-): TranscribeSegment[] {
+function buildResultFromFileTransPayload(payload: unknown): {
+  transcript: string;
+  segments: TranscribeSegment[];
+} {
+  const transcriptItems = extractTranscriptItems(payload);
+  const segments: TranscribeSegment[] = [];
+  const transcriptParts: string[] = [];
+
+  for (const item of transcriptItems) {
+    const itemText = item.text?.trim();
+    if (itemText) {
+      transcriptParts.push(itemText);
+    }
+
+    if (!Array.isArray(item.sentences)) {
+      continue;
+    }
+
+    for (const sentence of item.sentences) {
+      const text = sentence.text?.trim();
+      if (!text) {
+        continue;
+      }
+
+      const start = sentence.begin_time ?? sentence.sentence_begin_time ?? 0;
+      const end = sentence.end_time ?? sentence.sentence_end_time ?? start;
+      segments.push({
+        timestamp: `[${formatMilliseconds(start)} --> ${formatMilliseconds(end)}]`,
+        text,
+      });
+    }
+  }
+
+  const transcript = transcriptParts.join('\n').trim()
+    || segments.map((segment) => segment.text).join('\n').trim()
+    || extractPlainTranscript(payload);
+
+  return {
+    transcript,
+    segments: segments.length > 0 ? segments : buildSegmentsFromTranscript(transcript),
+  };
+}
+
+function extractTranscriptItems(payload: unknown): DashScopeTranscriptItem[] {
+  if (!payload || typeof payload !== 'object') {
+    return [];
+  }
+
+  if (Array.isArray(payload)) {
+    return payload.filter(isTranscriptItem);
+  }
+
+  const maybePayload = payload as {
+    transcripts?: unknown;
+    result?: unknown;
+    results?: unknown;
+  };
+
+  if (Array.isArray(maybePayload.transcripts)) {
+    return maybePayload.transcripts.filter(isTranscriptItem);
+  }
+
+  if (Array.isArray(maybePayload.results)) {
+    return maybePayload.results.filter(isTranscriptItem);
+  }
+
+  if (maybePayload.result && typeof maybePayload.result === 'object') {
+    return extractTranscriptItems(maybePayload.result);
+  }
+
+  if (isTranscriptItem(payload)) {
+    return [payload];
+  }
+
+  return [];
+}
+
+function isTranscriptItem(value: unknown): value is DashScopeTranscriptItem {
+  return Boolean(value) && typeof value === 'object';
+}
+
+function extractPlainTranscript(payload: unknown): string {
+  if (typeof payload === 'string') {
+    return payload.trim();
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return '';
+  }
+
+  const maybePayload = payload as {
+    text?: unknown;
+    transcript?: unknown;
+    result?: unknown;
+  };
+
+  if (typeof maybePayload.text === 'string') {
+    return maybePayload.text.trim();
+  }
+
+  if (typeof maybePayload.transcript === 'string') {
+    return maybePayload.transcript.trim();
+  }
+
+  if (maybePayload.result) {
+    return extractPlainTranscript(maybePayload.result);
+  }
+
+  return '';
+}
+
+function buildSegmentsFromTranscript(transcript: string): TranscribeSegment[] {
   if (!transcript.trim()) {
     return [];
   }
 
-  // 按句子或段落拆分（中英文标点）
   const sentences = transcript
     .split(/[。！？!?\n]+/)
-    .map((s) => s.trim())
+    .map((sentence) => sentence.trim())
     .filter(Boolean);
 
   if (sentences.length === 0) {
     return [
       {
-        timestamp: "[00:00:00.000 --> 00:00:00.000]",
+        timestamp: '[00:00:00.000 --> 00:00:00.000]',
         text: transcript.trim(),
       },
     ];
   }
 
-  // 为每个句子生成估算时间戳（按字符比例分配，每字符约 0.3 秒）
-  const totalLength = sentences.reduce((sum, s) => sum + s.length, 0);
+  const totalLength = sentences.reduce((sum, sentence) => sum + sentence.length, 0);
   const totalEstimatedDuration = totalLength * 0.3;
   let currentTime = 0;
 
@@ -272,51 +548,124 @@ function buildSegmentsFromTranscript(
   });
 }
 
+function shouldFallbackToFileTrans(error: unknown, requestedModel: string): boolean {
+  if (requestedModel === FILETRANS_MODEL) {
+    return false;
+  }
+
+  if (!(error instanceof DashScopeApiError)) {
+    return false;
+  }
+
+  if (error.status === 400 || error.status === 413) {
+    return true;
+  }
+
+  return Boolean(
+    error.message.includes('5 分钟')
+    || error.message.includes('5分钟')
+    || error.message.includes('10MB')
+    || error.message.includes('audio')
+    || error.message.includes('Audio'),
+  );
+}
+
+async function buildDashScopeApiError(response: Response): Promise<DashScopeApiError> {
+  let message = `千问 ASR API 请求失败 (${response.status})`;
+  let code: string | undefined;
+
+  try {
+    const payload = (await response.json()) as {
+      code?: string;
+      message?: string;
+      error?: { message?: string; code?: string };
+    };
+
+    code = payload.code || payload.error?.code;
+    message = payload.message || payload.error?.message || message;
+  } catch {
+    // ignore parse error
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    message = `${message}。请确认 API Key 有效，且与当前 DashScope 地域端点匹配。`;
+  }
+
+  return new DashScopeApiError(`千问 ASR: ${message}`, {
+    status: response.status,
+    code,
+  });
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/$/, '');
+}
+
+async function sleep(ms: number, abortSignal?: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      abortSignal?.removeEventListener('abort', handleAbort);
+      resolve();
+    }, ms);
+
+    const handleAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('The operation was aborted', 'AbortError'));
+    };
+
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', handleAbort, { once: true });
+    }
+  });
+}
+
+function formatMilliseconds(milliseconds: number): string {
+  return formatTime(milliseconds / 1000);
+}
+
 function formatTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
   const ms = Math.floor((seconds % 1) * 1000);
-  return `${pad(h)}:${pad(m)}:${pad(s)}.${pad3(ms)}`;
+  return `${pad(hours)}:${pad(minutes)}:${pad(secs)}.${pad3(ms)}`;
 }
 
-function pad(n: number): string {
-  return n.toString().padStart(2, "0");
+function pad(value: number): string {
+  return value.toString().padStart(2, '0');
 }
 
-function pad3(n: number): string {
-  return n.toString().padStart(3, "0");
+function pad3(value: number): string {
+  return value.toString().padStart(3, '0');
 }
 
-/**
- * 测试千问 ASR API 连接是否可用
- * 发送一个轻量请求验证 API Key 有效性
- */
 export async function testQwenASRConnection(
   config: OnlineASRConfig,
 ): Promise<{ success: boolean; message: string }> {
   if (!config.apiKey) {
-    return { success: false, message: "API Key 不能为空" };
+    return { success: false, message: 'API Key 不能为空' };
   }
 
   try {
-    // 使用一个极短的静音音频 URL 测试，或直接发送请求看鉴权是否通过
-    // 这里用一个简单的 HEAD-like 请求方式：发送无效音频让 API 返回鉴权结果
-    const apiEndpoint = `${config.baseUrl}/services/aigc/multimodal-generation/generation`;
+    const apiEndpoint = `${normalizeBaseUrl(config.baseUrl)}/services/aigc/multimodal-generation/generation`;
 
     const response = await fetch(apiEndpoint, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: config.modelName || "qwen3-asr-flash",
+        model: DEFAULT_FLASH_MODEL,
         input: {
           messages: [
             {
-              role: "user",
-              content: [{ text: "test" }],
+              role: 'system',
+              content: [{ text: '' }],
+            },
+            {
+              role: 'user',
+              content: [{ text: 'test' }],
             },
           ],
         },
@@ -324,29 +673,27 @@ export async function testQwenASRConnection(
     });
 
     if (response.status === 401 || response.status === 403) {
-      return { success: false, message: "API Key 无效或已过期" };
+      return { success: false, message: 'API Key 无效，或与当前 DashScope 地域端点不匹配' };
     }
 
-    // 400 参数错误（如发送了无效音频内容）说明鉴权已通过，Key 有效
-    // 这是预期行为：我们故意发送 text 内容而非音频来触发参数错误而非鉴权错误
     if (response.status === 400) {
       const body = await response.json();
-      // 如果是参数错误而非鉴权错误，说明连接&Key 都是通的
       if (
-        body.code &&
-        !body.code.includes("Unauthorized") &&
-        !body.code.includes("InvalidApiKey")
+        body.code
+        && !String(body.code).includes('Unauthorized')
+        && !String(body.code).includes('InvalidApiKey')
       ) {
-        return { success: true, message: "API Key 验证通过，连接正常" };
+        return { success: true, message: 'API Key 验证通过，连接正常' };
       }
+
       return {
         success: false,
-        message: body.message || "API Key 验证失败",
+        message: body.message || 'API Key 验证失败',
       };
     }
 
     if (response.ok) {
-      return { success: true, message: "API Key 验证通过，连接正常" };
+      return { success: true, message: 'API Key 验证通过，连接正常' };
     }
 
     return {
@@ -355,11 +702,12 @@ export async function testQwenASRConnection(
     };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.name === "AbortError") {
-        return { success: false, message: "连接超时" };
+      if (error.name === 'AbortError') {
+        return { success: false, message: '连接超时' };
       }
       return { success: false, message: `连接失败: ${error.message}` };
     }
-    return { success: false, message: "未知连接错误" };
+
+    return { success: false, message: '未知连接错误' };
   }
 }
