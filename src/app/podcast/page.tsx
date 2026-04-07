@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import TranscriptionCard from '@/components/transcription-card';
 import { TranscriptionRecord } from '@/types/transcription-history';
-import type { TranscribeProgress, TranscribeSegment } from '@/types';
+import type { TranscribeSegment } from '@/types';
 import { useTranscriptionConfig } from '@/hooks/use-transcription-config';
 import {
   createHelperEventSource,

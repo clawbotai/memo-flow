@@ -30,6 +30,8 @@ const WHISPER_TIMEOUT_MS = 30 * 60 * 1000;
 const SSE_HEARTBEAT_INTERVAL_MS = 10000;
 const TRANSCRIPTION_PROGRESS_START = 25;
 const TRANSCRIPTION_PROGRESS_END = 95;
+const DEFAULT_QWEN_BASE_URL = 'https://dashscope.aliyuncs.com/api/v1';
+const DEFAULT_QWEN_TEST_MODEL = 'qwen-plus';
 
 function getAppDataDir() {
   if (process.env.MEMOFLOW_HELPER_DATA_DIR) {
@@ -67,6 +69,8 @@ const modelDownloadClients = new Set();
 const liveClients = new Map();
 const activeTasks = new Map();
 let historyMutationChain = Promise.resolve();
+let serverInstance = null;
+let startPromise = null;
 
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload);
@@ -1362,6 +1366,76 @@ async function transcribeWithQwenFileTrans(audioUrl, config, onUpdate, signal) {
   }
 }
 
+async function testQwenASRConnection(config) {
+  if (!config?.apiKey) {
+    return { success: false, message: 'API Key 不能为空' };
+  }
+
+  try {
+    const baseUrl = String(config.baseUrl || DEFAULT_QWEN_BASE_URL).replace(/\/$/, '');
+    const response = await fetch(`${baseUrl}/services/aigc/multimodal-generation/generation`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: DEFAULT_QWEN_TEST_MODEL,
+        input: {
+          messages: [
+            {
+              role: 'system',
+              content: [{ text: '' }],
+            },
+            {
+              role: 'user',
+              content: [{ text: 'test' }],
+            },
+          ],
+        },
+      }),
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      return { success: false, message: 'API Key 无效，或与当前 DashScope 地域端点不匹配' };
+    }
+
+    if (response.status === 400) {
+      const body = await response.json();
+      if (
+        body.code &&
+        !String(body.code).includes('Unauthorized') &&
+        !String(body.code).includes('InvalidApiKey')
+      ) {
+        return { success: true, message: 'API Key 验证通过，连接正常' };
+      }
+
+      return {
+        success: false,
+        message: body.message || 'API Key 验证失败',
+      };
+    }
+
+    if (response.ok) {
+      return { success: true, message: 'API Key 验证通过，连接正常' };
+    }
+
+    return {
+      success: false,
+      message: `连接失败 (HTTP ${response.status})`,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        return { success: false, message: '连接超时' };
+      }
+      return { success: false, message: `连接失败: ${error.message}` };
+    }
+
+    return { success: false, message: '未知连接错误' };
+  }
+}
+
 async function downloadFile(sourceUrl, targetPath, signal) {
   const response = await fetch(sourceUrl, { signal });
   if (!response.ok) {
@@ -1956,6 +2030,13 @@ async function handleRequest(req, res) {
       return;
     }
 
+    if (req.method === 'POST' && pathname === '/online-asr/test') {
+      const body = await readJsonBody(req);
+      const result = await testQwenASRConnection(body);
+      sendJson(res, 200, result);
+      return;
+    }
+
     if (req.method === 'POST' && pathname === '/whisper/model/download') {
       const body = await readJsonBody(req);
       const modelName = body.modelName || getDefaultModelName();
@@ -2086,6 +2167,13 @@ async function handleRequest(req, res) {
 }
 
 async function start() {
+  if (serverInstance) {
+    return serverInstance;
+  }
+  if (startPromise) {
+    return startPromise;
+  }
+
   await ensureAppDirs();
   const config = await loadConfig();
   await reconcileInterruptedRecords();
@@ -2099,16 +2187,65 @@ async function start() {
     });
   });
 
-  server.listen(PORT, HOST, () => {
-    console.log(`[MemoFlow Helper] listening on http://${HOST}:${PORT}`);
-    console.log(`[MemoFlow Helper] app data dir: ${APP_DIR}`);
-    if (importedCount > 0) {
-      console.log(`[MemoFlow Helper] imported ${importedCount} transcript record(s) from ${config.outputDir}`);
-    }
+  startPromise = new Promise((resolve, reject) => {
+    const cleanup = () => {
+      server.off('error', handleError);
+      server.off('listening', handleListening);
+    };
+
+    const handleError = (error) => {
+      cleanup();
+      startPromise = null;
+      reject(error);
+    };
+
+    const handleListening = () => {
+      cleanup();
+      serverInstance = server;
+      startPromise = null;
+      console.log(`[MemoFlow Helper] listening on http://${HOST}:${PORT}`);
+      console.log(`[MemoFlow Helper] app data dir: ${APP_DIR}`);
+      if (importedCount > 0) {
+        console.log(`[MemoFlow Helper] imported ${importedCount} transcript record(s) from ${config.outputDir}`);
+      }
+      resolve(server);
+    };
+
+    server.once('error', handleError);
+    server.once('listening', handleListening);
+    server.listen(PORT, HOST);
   });
+
+  return startPromise;
 }
 
-start().catch((error) => {
-  console.error('[MemoFlow Helper] failed to start:', error);
-  process.exit(1);
-});
+async function stop() {
+  if (startPromise) {
+    await startPromise;
+  }
+
+  if (!serverInstance) {
+    return;
+  }
+
+  await new Promise((resolve, reject) => {
+    serverInstance.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
+  serverInstance = null;
+}
+
+if (require.main === module) {
+  start().catch((error) => {
+    console.error('[MemoFlow Helper] failed to start:', error);
+    process.exit(1);
+  });
+} else {
+  module.exports = { start, stop };
+}

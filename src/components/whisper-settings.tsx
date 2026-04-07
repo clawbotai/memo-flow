@@ -53,12 +53,6 @@ interface DownloadProgress {
   error?: string;
 }
 
-interface InstallProgress {
-  status: "idle" | "cloning" | "compiling" | "completed" | "error";
-  step: string;
-  error?: string;
-}
-
 const SETTINGS_SECTIONS: Array<{
   id: SettingsSection;
   label: string;
@@ -765,13 +759,11 @@ function TranscriptionEnginePanel({ visible }: { visible: boolean }) {
     setTestResult(null);
 
     try {
-      // 直接在前端调用测试（通过代理避免 CORS）
-      const res = await fetch("/api/test-asr-connection", {
+      const data = await helperRequest<{ success: boolean; message: string }>("/online-asr/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config.onlineASR),
       });
-      const data = await res.json();
       setTestResult(data);
     } catch {
       setTestResult({ success: false, message: "连接测试失败" });

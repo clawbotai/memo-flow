@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Linksy",
+  "version": "0.1.0",
+  "identifier": "linksy.desktop",
+  "build": {
+    "beforeDevCommand": "npm run desktop:web:dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run desktop:prebuild",
+    "frontendDist": "../dist-desktop"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Linksy",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1100,
+        "minHeight": 720,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' asset: tauri:; connect-src 'self' http://127.0.0.1:47392 ws://127.0.0.1:47392 https:; img-src 'self' asset: data: blob: http://127.0.0.1:47392 https:; media-src 'self' asset: data: blob: http://127.0.0.1:47392 https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' asset: data:;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "externalBin": [
+      "binaries/memoflow-helper"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

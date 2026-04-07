@@ -8,9 +8,16 @@
     "start": "next start",
     "helper": "node helper/server.js",
     "lint": "next lint",
-    "vercel-build": "next build"
+    "vercel-build": "next build",
+    "desktop:helper:build": "node desktop/scripts/build-helper-sidecar.cjs",
+    "desktop:web:dev": "vite --config desktop/vite.config.ts",
+    "desktop:web:build": "vite build --config desktop/vite.config.ts",
+    "desktop:prebuild": "npm run desktop:helper:build && npm run desktop:web:build",
+    "desktop:dev": "npm run desktop:helper:build && tauri dev",
+    "desktop:build": "tauri build"
   },
   "dependencies": {
+    "@fontsource/lora": "^5.2.8",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
@@ -21,20 +28,25 @@
     "next-themes": "^0.4.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.1",
     "tailwind-merge": "^2.6.1",
     "tailwindcss-animate": "^1.0.7",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1",
     "@types/node": "20.19.37",
     "@types/react": "18.3.28",
     "@types/react-dom": "^18.2.0",
     "@types/xml2js": "^0.4.14",
+    "@vitejs/plugin-react": "^4.4.1",
     "autoprefixer": "^10.4.17",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
+    "pkg": "^5.8.1",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vite": "^6.4.1"
   }
 }

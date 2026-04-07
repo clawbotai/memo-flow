@@ -1,7 +1,24 @@
 'use client';
 
-export const DEFAULT_HELPER_ORIGIN =
-  process.env.NEXT_PUBLIC_MEMOFLOW_HELPER_ORIGIN || 'http://127.0.0.1:47392';
+declare global {
+  interface Window {
+    __MEMOFLOW_HELPER_ORIGIN__?: string;
+  }
+}
+
+function resolveHelperOrigin(): string {
+  if (typeof window !== 'undefined' && window.__MEMOFLOW_HELPER_ORIGIN__) {
+    return window.__MEMOFLOW_HELPER_ORIGIN__;
+  }
+
+  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_MEMOFLOW_HELPER_ORIGIN) {
+    return process.env.NEXT_PUBLIC_MEMOFLOW_HELPER_ORIGIN;
+  }
+
+  return 'http://127.0.0.1:47392';
+}
+
+export const DEFAULT_HELPER_ORIGIN = resolveHelperOrigin();
 
 export class HelperUnavailableError extends Error {
   constructor(message = '未检测到本机 helper 服务') {
@@ -11,7 +28,8 @@ export class HelperUnavailableError extends Error {
 }
 
 function buildHelperUrl(path: string): string {
-  return `${DEFAULT_HELPER_ORIGIN}${path.startsWith('/') ? path : `/${path}`}`;
+  const origin = resolveHelperOrigin();
+  return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
 export async function helperRequest<T>(path: string, init?: RequestInit): Promise<T> {

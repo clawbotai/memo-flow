@@ -1,0 +1,17 @@
+[package]
+name = "linksy_tauri"
+version = "0.1.0"
+description = "MemoFlow desktop shell powered by Tauri"
+authors = ["MemoFlow"]
+edition = "2021"
+
+[lib]
+name = "linksy_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2.3.5"

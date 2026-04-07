@@ -11,6 +11,7 @@ coverage
 out/
 build
 dist
+dist-desktop
 
 # Production
 *.log
@@ -34,6 +35,8 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+src-tauri/target/
+src-tauri/binaries/
 
 # Whisper设置
 .codepilot-uploads/
