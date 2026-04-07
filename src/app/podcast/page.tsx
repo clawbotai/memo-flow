@@ -14,6 +14,11 @@ import { TranscriptionRecord } from '@/types/transcription-history';
 import type { TranscribeProgress, TranscribeSegment } from '@/types';
 import { useTranscriptionConfig } from '@/hooks/use-transcription-config';
 import {
+  createHelperEventSource,
+  helperRequest,
+  isHelperUnavailableError,
+} from '@/lib/local-helper-client';
+import {
   mergeCachedTranscriptionHistory,
   readCachedTranscriptionHistory,
   removeCachedTranscriptionRecord,
@@ -24,6 +29,16 @@ type PodcastAudioInfo = {
   audioUrl: string;
   wordCount: number;
   language: string;
+};
+
+const STATUS_STAGE_MAP: Record<string, string> = {
+  idle: '准备中...',
+  fetching_info: '正在获取播客信息...',
+  downloading_audio: '正在下载音频文件...',
+  converting: '正在转换音频格式...',
+  transcribing: '正在转录中...',
+  completed: '转录完成',
+  error: '转录失败',
 };
 
 export default function PodcastPage() {
@@ -61,8 +76,11 @@ export default function PodcastPage() {
   useEffect(() => {
     const loadHistory = async () => {
       try {
-        const response = await fetch('/api/transcription-history');
-        const result = await response.json();
+        const result = await helperRequest<{
+          success: boolean;
+          data: TranscriptionRecord[];
+          error?: string;
+        }>('/transcriptions');
 
         if (result.success) {
           setTranscriptionHistory(mergeCachedTranscriptionHistory(result.data));
@@ -92,8 +110,11 @@ export default function PodcastPage() {
       // 当前转录任务结束时，刷新历史记录
       const refreshHistory = async () => {
         try {
-          const response = await fetch('/api/transcription-history');
-          const result = await response.json();
+          const result = await helperRequest<{
+            success: boolean;
+            data: TranscriptionRecord[];
+            error?: string;
+          }>('/transcriptions');
 
           if (result.success) {
             setTranscriptionHistory(mergeCachedTranscriptionHistory(result.data));
@@ -150,7 +171,7 @@ export default function PodcastPage() {
     clearReconnectTimer();
     transcribeEsRef.current?.close();
 
-    const es = new EventSource(`/api/transcribe-progress?taskId=${currentTaskId}`);
+    const es = createHelperEventSource(`/transcriptions/${currentTaskId}/live`);
     transcribeEsRef.current = es;
 
     es.onopen = () => {
@@ -159,18 +180,24 @@ export default function PodcastPage() {
 
     es.onmessage = (event) => {
       try {
-        const data: TranscribeProgress = JSON.parse(event.data);
+        const payload = JSON.parse(event.data) as {
+          success: boolean;
+          data?: TranscriptionRecord;
+        };
 
         if (activeTaskIdRef.current !== currentTaskId) {
           return;
         }
 
-        setTranscribeStage(data.stage);
-        setTranscribeStatus(data.status);
-
-        if (data.episodeTitle) {
-          setEpisodeTitle(data.episodeTitle);
+        if (!payload.success || !payload.data) {
+          return;
         }
+
+        const data = payload.data;
+
+        setTranscribeStage(STATUS_STAGE_MAP[data.status] || '处理中...');
+        setTranscribeStatus(data.status);
+        setEpisodeTitle(data.title || '');
 
         if (data.segments && data.segments.length > 0) {
           setLiveSegments(data.segments);
@@ -184,15 +211,15 @@ export default function PodcastPage() {
           const audioUrl = data.audioUrl;
           setPodcastAudioInfo((prev) => prev ?? {
             audioUrl,
-            wordCount: 0,
-            language: 'zh',
+            wordCount: data.wordCount || 0,
+            language: data.language || 'zh',
           });
         }
 
         const cachedRecord = upsertCachedTranscriptionRecord({
           id: currentTaskId,
           taskId: currentTaskId,
-          title: data.episodeTitle || episodeTitle || '未知标题',
+          title: data.title || episodeTitle || '未知标题',
           status: data.status,
           progress: data.progress ?? null,
           segments: data.segments || [],
@@ -293,8 +320,13 @@ export default function PodcastPage() {
 
       // 如果使用本地 Whisper 引擎，检查安装状态
       if (config.activeEngine === 'local-whisper') {
-        const statusRes = await fetch('/api/whisper-status');
-        const statusData = await statusRes.json();
+        const statusData = await helperRequest<{
+          success: boolean;
+          data: {
+            whisperInstalled: boolean;
+            modelInstalled: boolean;
+          };
+        }>('/whisper/status');
 
         if (statusData.success) {
           const { whisperInstalled, modelInstalled } = statusData.data;
@@ -317,7 +349,11 @@ export default function PodcastPage() {
       }
 
       // 调用处理播客的API
-      const response = await fetch('/api/process-podcast', {
+      const result = await helperRequest<{
+        success: boolean;
+        data: { taskId: string };
+        error?: string;
+      }>('/transcriptions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -325,12 +361,9 @@ export default function PodcastPage() {
         body: JSON.stringify({ 
           url: podcastUrl,
           engine: config.activeEngine,
-          whisperConfig: config.whisper,
           onlineASRConfig: config.onlineASR,
         }),
       });
-
-      const result = await response.json();
 
       if (!result.success) {
         setToast({ message: result.error || '启动转录失败', type: 'error' });
@@ -358,6 +391,9 @@ export default function PodcastPage() {
       connectToTranscribeProgress(newTaskId);
     } catch (error) {
       console.error('Podcast transcription error:', error);
+      if (isHelperUnavailableError(error)) {
+        setToast({ message: '未检测到本机 helper 服务，请先在电脑上启动 MemoFlow helper', type: 'error' });
+      }
       transcribeFinishedRef.current = true;
       activeTaskIdRef.current = null;
       closeEventSource();

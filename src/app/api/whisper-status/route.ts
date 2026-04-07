@@ -38,6 +38,7 @@ export async function GET() {
     const ffmpegInstalled = isValidFfmpegExecutable(resolvedConfig.ffmpegPath);
 
     const status: WhisperStatus = {
+      helperConnected: false,
       whisperInstalled,
       modelInstalled,
       ffmpegInstalled,
@@ -46,6 +47,8 @@ export async function GET() {
       ffmpegPath: config.ffmpegPath,
       modelName,
       modelSize,
+      platform: process.platform,
+      installMode: 'mixed',
     };
 
     return NextResponse.json({

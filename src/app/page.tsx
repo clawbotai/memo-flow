@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Mic, History, FileSearch, Library } from 'lucide-react';
 import { TranscriptionRecord } from '@/types/transcription-history';
 import TranscriptionCard from '@/components/transcription-card';
+import { helperRequest } from '@/lib/local-helper-client';
 import {
   mergeCachedTranscriptionHistory,
   readCachedTranscriptionHistory,
@@ -24,8 +25,10 @@ export default function Home() {
   useEffect(() => {
     const loadRecent = async () => {
       try {
-        const response = await fetch('/api/transcription-history');
-        const result = await response.json();
+        const result = await helperRequest<{
+          success: boolean;
+          data: TranscriptionRecord[];
+        }>('/transcriptions');
         if (result.success) {
           const sorted = mergeCachedTranscriptionHistory(result.data)
             .sort((a: TranscriptionRecord, b: TranscriptionRecord) =>

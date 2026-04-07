@@ -25,3 +25,20 @@
 - 📚 **知识库** - 搜索/筛选/统计
 
 ---
+
+## 本机 Helper
+
+部署到 Vercel 后，浏览器本身不能直接读取用户电脑上的 `whisper.cpp`、`ffmpeg`、模型文件和输出目录。
+
+本项目通过本机 helper 处理所有本地转录能力：
+
+```bash
+npm run helper
+```
+
+- 默认监听：`http://127.0.0.1:47392`
+- macOS 数据目录：`~/Library/Application Support/MemoFlow/`
+- Windows 数据目录：`%APPDATA%/MemoFlow/`
+- 开发环境可覆盖数据目录：`MEMOFLOW_HELPER_DATA_DIR=/tmp/memo-flow-helper-data npm run helper`
+
+前端中的 `Whisper 设置`、转录历史、实时进度、重转录和删除操作，都会通过这个本机 helper 访问用户电脑上的本地环境。

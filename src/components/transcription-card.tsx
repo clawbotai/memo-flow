@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { TranscriptionRecord } from '@/types/transcription-history';
+import { helperRequest } from '@/lib/local-helper-client';
 import { removeCachedTranscriptionRecord } from '@/lib/transcription-browser-cache';
 
 interface TranscriptionCardProps {
@@ -77,10 +78,12 @@ const TranscriptionCard: React.FC<TranscriptionCardProps> = ({ record, onDeleted
     setDeleteError('');
 
     try {
-      const response = await fetch(`/api/transcription-history?id=${record.id}`, {
-        method: 'DELETE',
-      });
-      const result = await response.json();
+      const result = await helperRequest<{ success: boolean; error?: string }>(
+        `/transcriptions/${record.id}`,
+        {
+          method: 'DELETE',
+        },
+      );
 
       if (!result.success && result.error !== '转录记录不存在') {
         setDeleteError(result.error || '删除失败，请重试');

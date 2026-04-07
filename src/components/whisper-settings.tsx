@@ -31,6 +31,11 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { WhisperConfig, WhisperStatus, TranscriptionEngineType } from "@/types";
 import { useTranscriptionConfig } from "@/hooks/use-transcription-config";
+import {
+  createHelperEventSource,
+  helperRequest,
+  isHelperUnavailableError,
+} from "@/lib/local-helper-client";
 
 interface WhisperSettingsProps {
   open: boolean;
@@ -217,55 +222,63 @@ function WhisperPanel({
   visible: boolean;
   onClose: () => void;
 }) {
-  const { config: appConfig, updateWhisperConfig } = useTranscriptionConfig();
+  const [helperConnected, setHelperConnected] = React.useState(false);
   const [status, setStatus] = React.useState<WhisperStatus | null>(null);
-  const [config, setConfig] = React.useState<WhisperConfig>(appConfig.whisper);
-  const [selectedModel, setSelectedModel] = React.useState<"small" | "medium">(appConfig.whisper.modelName as "small" | "medium");
+  const [config, setConfig] = React.useState<WhisperConfig>({
+    whisperPath: "",
+    modelPath: "",
+    modelName: "small",
+    threads: 4,
+    outputDir: "",
+    ffmpegPath: "",
+  });
+  const [defaultConfig, setDefaultConfig] = React.useState<WhisperConfig | null>(null);
+  const [selectedModel, setSelectedModel] = React.useState<"small" | "medium">("small");
   const [downloading, setDownloading] = React.useState(false);
   const [downloadProgress, setDownloadProgress] = React.useState<DownloadProgress | null>(null);
-  const [installing, setInstalling] = React.useState(false);
-  const [installProgress, setInstallProgress] = React.useState<InstallProgress | null>(null);
-  const [ffmpegInstalling, setFfmpegInstalling] = React.useState(false);
-  const [ffmpegInstallProgress, setFfmpegInstallProgress] = React.useState<InstallProgress | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [pendingModelDownload, setPendingModelDownload] = React.useState(false);
 
   const downloadEsRef = React.useRef<EventSource | null>(null);
-  const installEsRef = React.useRef<EventSource | null>(null);
-  const ffmpegEsRef = React.useRef<EventSource | null>(null);
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const statusRes = await fetch("/api/whisper-status");
-      const statusData = await statusRes.json();
+      const [healthResult, configResult, statusResult] = await Promise.all([
+        helperRequest<{ success: boolean; data: { helperConnected: boolean } }>("/health"),
+        helperRequest<{ success: boolean; data: WhisperConfig }>("/config"),
+        helperRequest<{ success: boolean; data: WhisperStatus }>("/whisper/status"),
+      ]);
 
-      if (statusData.success) {
-        setStatus(statusData.data);
-        if (statusData.data.whisperInstalled) {
-          setInstalling(false);
-        }
-        if (statusData.data.ffmpegInstalled) {
-          setFfmpegInstalling(false);
-        }
+      if (healthResult.success) {
+        setHelperConnected(healthResult.data.helperConnected);
       }
 
-      // 从 localStorage 中同步配置状态
-      if (appConfig?.whisper) {
-        setConfig(appConfig.whisper);
-        setSelectedModel(appConfig.whisper.modelName as "small" | "medium");
+      if (configResult.success) {
+        setConfig(configResult.data);
+        setSelectedModel((configResult.data.modelName as "small" | "medium") || "small");
+        setDefaultConfig((prev) => prev ?? configResult.data);
+      }
+
+      if (statusResult.success) {
+        setStatus(statusResult.data);
       }
     } catch (err) {
-      setError("加载环境状态失败，请重试");
-      console.error("加载状态失败:", err);
+      setHelperConnected(false);
+      setStatus(null);
+      if (isHelperUnavailableError(err)) {
+        setError("未检测到本机 helper 服务，请先在电脑上启动 `npm run helper`。");
+      } else {
+        setError("加载本机环境状态失败，请重试");
+      }
+      console.error("加载 helper 状态失败:", err);
     } finally {
       setLoading(false);
     }
-  }, [appConfig]);
+  }, []);
 
   React.useEffect(() => {
     if (open) {
@@ -276,15 +289,13 @@ function WhisperPanel({
   React.useEffect(() => {
     return () => {
       downloadEsRef.current?.close();
-      installEsRef.current?.close();
-      ffmpegEsRef.current?.close();
     };
   }, []);
 
   const startDownloadTracking = React.useCallback(() => {
     downloadEsRef.current?.close();
 
-    const es = new EventSource("/api/whisper-download-progress");
+    const es = createHelperEventSource("/whisper/model/download-progress");
     downloadEsRef.current = es;
 
     es.onmessage = (event) => {
@@ -309,159 +320,11 @@ function WhisperPanel({
     };
 
     es.onerror = () => {
+      setDownloading(false);
       es.close();
       downloadEsRef.current = null;
     };
   }, [loadData]);
-
-  const startInstallTracking = React.useCallback(() => {
-    installEsRef.current?.close();
-
-    const es = new EventSource("/api/whisper-install-progress");
-    installEsRef.current = es;
-
-    let idleCount = 0;
-
-    es.onmessage = (event) => {
-      try {
-        const data: InstallProgress = JSON.parse(event.data);
-        setInstallProgress(data);
-
-        if (data.status === "completed") {
-          setInstalling(false);
-          es.close();
-          installEsRef.current = null;
-          loadData();
-        } else if (data.status === "error") {
-          setInstalling(false);
-          setPendingModelDownload(false);
-          setError(data.error || "安装失败");
-          es.close();
-          installEsRef.current = null;
-        } else if (data.status === "idle") {
-          idleCount++;
-          if (idleCount >= 3) {
-            setInstalling(false);
-            es.close();
-            installEsRef.current = null;
-            loadData();
-          }
-        }
-      } catch (err) {
-        console.error("解析安装进度失败:", err);
-      }
-    };
-
-    es.onerror = () => {
-      es.close();
-      installEsRef.current = null;
-    };
-  }, [loadData]);
-
-  const startFfmpegInstallTracking = React.useCallback(() => {
-    ffmpegEsRef.current?.close();
-
-    const es = new EventSource("/api/ffmpeg-install-progress");
-    ffmpegEsRef.current = es;
-
-    es.onmessage = (event) => {
-      try {
-        const data: InstallProgress = JSON.parse(event.data);
-        setFfmpegInstallProgress(data);
-
-        if (data.status === "completed") {
-          setFfmpegInstalling(false);
-          es.close();
-          ffmpegEsRef.current = null;
-          loadData();
-        } else if (data.status === "error") {
-          setFfmpegInstalling(false);
-          setError(data.error || "ffmpeg 安装失败");
-          es.close();
-          ffmpegEsRef.current = null;
-        }
-      } catch (err) {
-        console.error("解析 ffmpeg 安装进度失败:", err);
-      }
-    };
-
-    es.onerror = () => {
-      setFfmpegInstalling(false);
-      es.close();
-      ffmpegEsRef.current = null;
-    };
-  }, [loadData]);
-
-  React.useEffect(() => {
-    if (pendingModelDownload && !installing && installProgress?.status === "completed") {
-      setPendingModelDownload(false);
-      void handleDownloadModel();
-    }
-  }, [installProgress, installing, pendingModelDownload]);
-
-  const handleInstallWhisper = async () => {
-    setError(null);
-    setInstalling(true);
-    setInstallProgress(null);
-
-    try {
-      const res = await fetch("/api/whisper-install", { method: "POST" });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "启动安装失败");
-      }
-
-      if (data.alreadyInstalled) {
-        setInstalling(false);
-        loadData();
-        return;
-      }
-
-      startInstallTracking();
-
-      setTimeout(() => {
-        loadData();
-      }, 3000);
-
-      const safetyTimeout = setTimeout(() => {
-        setInstalling(false);
-      }, 60000);
-
-      const cleanup = () => clearTimeout(safetyTimeout);
-      return cleanup;
-
-    } catch (err) {
-      setInstalling(false);
-      setError(err instanceof Error ? err.message : "启动安装失败");
-    }
-  };
-
-  const handleInstallFfmpeg = async () => {
-    setError(null);
-    setFfmpegInstalling(true);
-    setFfmpegInstallProgress(null);
-
-    try {
-      const res = await fetch("/api/ffmpeg-install", { method: "POST" });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "启动 ffmpeg 安装失败");
-      }
-
-      if (data.alreadyInstalled) {
-        setFfmpegInstalling(false);
-        loadData();
-        return;
-      }
-
-      startFfmpegInstallTracking();
-    } catch (err) {
-      setFfmpegInstalling(false);
-      setError(err instanceof Error ? err.message : "启动 ffmpeg 安装失败");
-    }
-  };
 
   const handleDownloadModel = async () => {
     setError(null);
@@ -469,22 +332,11 @@ function WhisperPanel({
     setDownloadProgress(null);
 
     try {
-      const res = await fetch("/api/whisper-download", {
+      await helperRequest<{ success: boolean }>("/whisper/model/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modelName: selectedModel }),
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        if (data.alreadyExists) {
-          loadData();
-          setDownloading(false);
-          return;
-        }
-        throw new Error(data.error || "启动下载失败");
-      }
 
       startDownloadTracking();
     } catch (err) {
@@ -494,12 +346,7 @@ function WhisperPanel({
   };
 
   const handleDownload = async () => {
-    if (!status?.whisperInstalled) {
-      setPendingModelDownload(true);
-      await handleInstallWhisper();
-    } else {
-      await handleDownloadModel();
-    }
+    await handleDownloadModel();
   };
 
   const handleSave = async () => {
@@ -507,9 +354,15 @@ function WhisperPanel({
     setError(null);
 
     try {
-      // 延迟一点以显示加载效果
-      await new Promise(resolve => setTimeout(resolve, 300));
-      updateWhisperConfig(config);
+      const result = await helperRequest<{ success: boolean; data: WhisperConfig }>("/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      if (result.success) {
+        setConfig(result.data);
+      }
+      await loadData();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存配置失败");
@@ -532,40 +385,24 @@ function WhisperPanel({
   };
 
   const handleResetProjectPaths = () => {
-    setConfig((prev) => ({
-      ...prev,
-      outputDir: "transcripts",
-      whisperPath: "whisper.cpp/build/bin/whisper-cli",
-      modelPath: `models/ggml-${selectedModel}.bin`,
-      ffmpegPath: "ffmpeg",
-    }));
+    if (!defaultConfig) return;
+    setConfig({
+      ...defaultConfig,
+      modelName: selectedModel,
+      modelPath: defaultConfig.modelPath.replace(/ggml-\w+\.bin$/i, `ggml-${selectedModel}.bin`),
+    });
   };
 
   const modelExists = status?.modelName === selectedModel && status?.modelInstalled;
-  const isBusy = installing || downloading || saving || ffmpegInstalling;
+  const isBusy = downloading || saving;
+  const platformLabel = status?.platform === "win32" ? "Windows" : status?.platform === "darwin" ? "macOS" : status?.platform ?? "本机";
 
   const getDownloadButtonContent = () => {
-    if (installing) {
-      return (
-        <>
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          正在安装 whisper.cpp...
-        </>
-      );
-    }
     if (downloading) {
       return (
         <>
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           下载中...
-        </>
-      );
-    }
-    if (!status?.whisperInstalled) {
-      return (
-        <>
-          <Download className="mr-2 h-4 w-4" />
-          安装 whisper.cpp 并下载模型
         </>
       );
     }
@@ -593,7 +430,7 @@ function WhisperPanel({
       <div className="space-y-1">
         <h3 className="text-lg font-semibold">Whisper 设置</h3>
         <p className="text-sm text-muted-foreground">
-          配置本地语音识别模型、安装 whisper.cpp 并管理转录参数。
+          连接本机 helper，读取当前电脑上的 Whisper/ffmpeg/模型配置。
         </p>
       </div>
 
@@ -612,65 +449,50 @@ function WhisperPanel({
           <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">whisper.cpp</span>
+                <span className="text-sm font-medium">本机 helper</span>
                 <div className="flex items-center gap-2">
                   <span
                     className={cn(
                       "h-2.5 w-2.5 rounded-full",
-                      status?.whisperInstalled ? "bg-green-500" : "bg-red-500"
+                      helperConnected ? "bg-green-500" : "bg-red-500"
                     )}
                   />
                   <span className="text-sm text-muted-foreground">
-                    {status?.whisperInstalled ? "已安装" : "未安装"}
+                    {helperConnected ? `已连接 · ${platformLabel}` : "未连接"}
                   </span>
                 </div>
               </div>
 
-              {!status?.whisperInstalled && (
+              {!helperConnected && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    需要先安装 whisper.cpp 才能进行语音转录（依赖 Git 与本地编译工具）。
+                    前端部署在 Vercel 后，浏览器无法直接访问你电脑的文件系统；需要先在用户电脑上启动本机 helper。
                   </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleInstallWhisper}
-                    disabled={isBusy}
-                    className="w-full sm:w-auto"
-                  >
-                    {installing ? (
-                      <>
-                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                        安装中...
-                      </>
-                    ) : (
-                      <>
-                        <Terminal className="mr-2 h-3.5 w-3.5" />
-                        一键安装 whisper.cpp
-                      </>
-                    )}
-                  </Button>
+                  <div className="rounded-xl bg-muted/60 px-3 py-3 text-xs text-muted-foreground">
+                    在用户电脑本机运行：<code>npm run helper</code>
+                  </div>
                 </div>
               )}
 
-              {installing && installProgress && (
-                <div className="rounded-xl bg-muted/60 px-3 py-3">
-                  <div className="flex items-center gap-2 text-xs">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    <span className="text-muted-foreground">{installProgress.step}</span>
+              <div className="border-t border-border/50 pt-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">whisper.cpp</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "h-2.5 w-2.5 rounded-full",
+                        status?.whisperInstalled ? "bg-green-500" : "bg-red-500"
+                      )}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {status?.whisperInstalled ? "路径可用" : "路径无效"}
+                    </span>
                   </div>
-                  {installProgress.status === "cloning" && (
-                    <div className="mt-1 text-[10px] text-muted-foreground/70">
-                      正在从 GitHub 克隆仓库...
-                    </div>
-                  )}
-                  {installProgress.status === "compiling" && (
-                    <div className="mt-1 text-[10px] text-muted-foreground/70">
-                      编译可能需要几分钟，请耐心等待。
-                    </div>
-                  )}
                 </div>
-              )}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  v1 采用混合模式：Windows 和 macOS 都支持手动填写本机 whisper 路径。
+                </p>
+              </div>
 
               <div className="border-t border-border/50 pt-4">
                 <div className="flex items-center justify-between">
@@ -683,45 +505,13 @@ function WhisperPanel({
                       )}
                     />
                     <span className="text-sm text-muted-foreground">
-                      {status?.ffmpegInstalled ? "已安装" : "未安装"}
+                      {status?.ffmpegInstalled ? "路径可用" : "路径无效"}
                     </span>
                   </div>
                 </div>
-                {!status?.ffmpegInstalled && (
-                  <div className="mt-2 space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      需要安装 ffmpeg 才能进行音频格式转换。
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleInstallFfmpeg}
-                      disabled={isBusy}
-                      className="w-full sm:w-auto"
-                    >
-                      {ffmpegInstalling ? (
-                        <>
-                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                          安装中...
-                        </>
-                      ) : (
-                        <>
-                          <Terminal className="mr-2 h-3.5 w-3.5" />
-                          安装 ffmpeg
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
-
-                {ffmpegInstalling && ffmpegInstallProgress && (
-                  <div className="mt-2 rounded-xl bg-muted/60 px-3 py-3">
-                    <div className="flex items-center gap-2 text-xs">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span className="text-muted-foreground">{ffmpegInstallProgress.step}</span>
-                    </div>
-                  </div>
-                )}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  本地 Whisper 转录需要 ffmpeg 完成音频格式转换。
+                </p>
               </div>
 
               <div className="border-t border-border/50 pt-4">
@@ -735,13 +525,10 @@ function WhisperPanel({
                       )}
                     />
                     <span className="text-sm text-muted-foreground">
-                      {status?.modelInstalled ? `已安装 (${status.modelSize})` : "未安装"}
+                      {status?.modelInstalled ? `已存在 (${status.modelSize})` : "未下载"}
                     </span>
                   </div>
                 </div>
-                {!status?.modelInstalled && (
-                  <p className="mt-1 text-xs text-muted-foreground">请先在下方选择并下载模型。</p>
-                )}
               </div>
             </div>
           </div>
@@ -790,24 +577,10 @@ function WhisperPanel({
               </div>
 
               <div className="space-y-3 pt-2">
-                {installing && pendingModelDownload && installProgress && (
-                  <div className="rounded-xl bg-blue-50 px-3 py-3 text-xs text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
-                    <span>Step 1/2: </span>
-                    {installProgress.step}
-                    <span className="mt-1 block text-[10px] text-blue-500 dark:text-blue-400">
-                      安装完成后将自动开始下载模型。
-                    </span>
-                  </div>
-                )}
-
                 {downloading && downloadProgress ? (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">
-                        {pendingModelDownload ||
-                        (!status?.whisperInstalled && installProgress?.status === "completed")
-                          ? "Step 2/2: "
-                          : ""}
                         正在下载 {downloadProgress.modelName} 模型...
                       </span>
                       <span className="font-medium">{downloadProgress.percent?.toFixed(1)}%</span>
@@ -821,7 +594,7 @@ function WhisperPanel({
                 ) : (
                   <Button
                     onClick={handleDownload}
-                    disabled={isBusy}
+                    disabled={isBusy || !helperConnected}
                     className="w-full sm:w-auto"
                     variant={modelExists && status?.whisperInstalled ? "outline" : "default"}
                   >
@@ -855,7 +628,7 @@ function WhisperPanel({
                 <div className="grid gap-4 rounded-2xl border border-border/60 bg-background/70 p-4">
                   <div className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs text-muted-foreground">
-                      目录支持相对路径，相对于当前项目根目录解析。
+                      建议填写用户电脑上的绝对路径；Windows 与 macOS 都可手动配置。
                     </p>
                     <Button
                       type="button"
@@ -874,10 +647,11 @@ function WhisperPanel({
                     <Input
                       value={config.outputDir}
                       onChange={(e) => handleConfigChange("outputDir", e.target.value)}
-                      placeholder="transcripts"
+                      placeholder="/Users/you/Documents/MemoFlow Transcripts"
+                      disabled={!helperConnected}
                     />
                     <p className="text-xs text-muted-foreground">
-                      转录完成后，文件将保存到此目录下（以播客标题命名的子文件夹）。
+                      转录完成后，文件将保存到这个本机目录下，并按播客标题创建子目录。
                     </p>
                   </div>
 
@@ -886,10 +660,11 @@ function WhisperPanel({
                     <Input
                       value={config.whisperPath}
                       onChange={(e) => handleConfigChange("whisperPath", e.target.value)}
-                      placeholder="whisper.cpp/build/bin/whisper-cli"
+                      placeholder={status?.platform === "win32" ? "C:\\whisper\\whisper-cli.exe" : "/usr/local/bin/whisper-cli"}
+                      disabled={!helperConnected}
                     />
                     <p className="text-xs text-muted-foreground">
-                      推荐使用当前项目内的相对路径，便于迁移目录。
+                      支持绝对路径，或已经加入系统 PATH 的命令名。
                     </p>
                   </div>
 
@@ -898,10 +673,11 @@ function WhisperPanel({
                     <Input
                       value={config.modelPath}
                       onChange={(e) => handleConfigChange("modelPath", e.target.value)}
-                      placeholder={`models/ggml-${selectedModel}.bin`}
+                      placeholder={`ggml-${selectedModel}.bin 的本机绝对路径`}
+                      disabled={!helperConnected}
                     />
                     <p className="text-xs text-muted-foreground">
-                      模型建议放在项目内的 `models/` 目录。
+                      下载按钮会默认把模型放到 helper 管理目录，也可以手动改成本机其他路径。
                     </p>
                   </div>
 
@@ -911,9 +687,10 @@ function WhisperPanel({
                       value={config.ffmpegPath}
                       onChange={(e) => handleConfigChange("ffmpegPath", e.target.value)}
                       placeholder="ffmpeg"
+                      disabled={!helperConnected}
                     />
                     <p className="text-xs text-muted-foreground">
-                      用于转换音频格式（需 16kHz WAV）。
+                      支持绝对路径，或已加入 PATH 的 `ffmpeg` 命令。
                     </p>
                   </div>
 
@@ -922,11 +699,12 @@ function WhisperPanel({
                     <Input
                       type="number"
                       min={1}
-                      max={16}
+                      max={8}
                       value={config.threads}
                       onChange={(e) => handleConfigChange("threads", parseInt(e.target.value, 10) || 1)}
+                      disabled={!helperConnected}
                     />
-                    <p className="text-xs text-muted-foreground">建议设置为 CPU 核心数的一半。</p>
+                    <p className="text-xs text-muted-foreground">helper 会自动限制到 1-8 线程，默认建议不超过 8。</p>
                   </div>
                 </div>
               )}
@@ -937,7 +715,7 @@ function WhisperPanel({
             <Button variant="outline" onClick={onClose} disabled={saving || isBusy}>
               取消
             </Button>
-            <Button onClick={handleSave} disabled={saving || loading}>
+            <Button onClick={handleSave} disabled={saving || loading || !helperConnected}>
               {saving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

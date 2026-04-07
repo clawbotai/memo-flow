@@ -5,6 +5,7 @@ import TranscriptionDetail from '@/components/transcription-detail';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FlowLoader } from '@/components/ui/flow-loader';
 import type { TranscriptionRecord } from '@/types/transcription-history';
+import { helperRequest } from '@/lib/local-helper-client';
 import {
   getCachedTranscriptionRecord,
   mergeCachedTranscriptionHistory,
@@ -23,8 +24,10 @@ export default function TranscriptionDetailPage({ params }: TranscriptionDetailP
   useEffect(() => {
     const loadRecord = async () => {
       try {
-        const response = await fetch(`/api/transcription-history?id=${params.id}`);
-        const result = await response.json();
+        const result = await helperRequest<{
+          success: boolean;
+          data: TranscriptionRecord;
+        }>(`/transcriptions/${params.id}`);
 
         if (result.success) {
           const merged = mergeCachedTranscriptionHistory([result.data]);

@@ -2,22 +2,12 @@
 
 import { useState, useCallback, useEffect } from "react";
 import type {
-  TranscriptionConfig,
+  BrowserTranscriptionConfig,
   TranscriptionEngineType,
-  WhisperConfig,
   OnlineASRConfig,
 } from "@/types";
 
 const STORAGE_KEY = "linksy-transcription-config";
-
-const DEFAULT_WHISPER_CONFIG: WhisperConfig = {
-  whisperPath: "whisper.cpp/build/bin/whisper-cli",
-  modelPath: "models/ggml-small.bin",
-  modelName: "small",
-  threads: 4,
-  outputDir: "transcripts",
-  ffmpegPath: "ffmpeg",
-};
 
 const DEFAULT_ONLINE_ASR_CONFIG: OnlineASRConfig = {
   provider: "qwen",
@@ -27,9 +17,8 @@ const DEFAULT_ONLINE_ASR_CONFIG: OnlineASRConfig = {
   enableITN: true,
 };
 
-const DEFAULT_CONFIG: TranscriptionConfig = {
+const DEFAULT_CONFIG: BrowserTranscriptionConfig = {
   activeEngine: "local-whisper",
-  whisper: DEFAULT_WHISPER_CONFIG,
   onlineASR: DEFAULT_ONLINE_ASR_CONFIG,
 };
 
@@ -37,7 +26,7 @@ const DEFAULT_CONFIG: TranscriptionConfig = {
  * 从 localStorage 读取转录配置
  * 在 SSR 环境下返回默认值
  */
-export function getStoredTranscriptionConfig(): TranscriptionConfig {
+export function getStoredTranscriptionConfig(): BrowserTranscriptionConfig {
   if (typeof window === "undefined") {
     return DEFAULT_CONFIG;
   }
@@ -46,7 +35,9 @@ export function getStoredTranscriptionConfig(): TranscriptionConfig {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return DEFAULT_CONFIG;
 
-    const parsed = JSON.parse(stored) as Partial<TranscriptionConfig>;
+    const parsed = JSON.parse(stored) as Partial<BrowserTranscriptionConfig> & {
+      whisper?: unknown;
+    };
     const storedOnlineASR = { ...DEFAULT_ONLINE_ASR_CONFIG, ...parsed.onlineASR };
     if (storedOnlineASR.modelName === "qwen3-asr-flash") {
       storedOnlineASR.modelName = DEFAULT_ONLINE_ASR_CONFIG.modelName;
@@ -54,7 +45,6 @@ export function getStoredTranscriptionConfig(): TranscriptionConfig {
 
     return {
       activeEngine: parsed.activeEngine ?? DEFAULT_CONFIG.activeEngine,
-      whisper: { ...DEFAULT_WHISPER_CONFIG, ...parsed.whisper },
       onlineASR: storedOnlineASR,
     };
   } catch {
@@ -65,7 +55,7 @@ export function getStoredTranscriptionConfig(): TranscriptionConfig {
 /**
  * 保存转录配置到 localStorage
  */
-function saveTranscriptionConfig(config: TranscriptionConfig): void {
+function saveTranscriptionConfig(config: BrowserTranscriptionConfig): void {
   if (typeof window === "undefined") return;
 
   try {
@@ -82,12 +72,11 @@ function saveTranscriptionConfig(config: TranscriptionConfig): void {
  * - config: 当前转录配置
  * - updateConfig: 部分更新配置
  * - setActiveEngine: 切换转录引擎
- * - updateWhisperConfig: 更新 Whisper 子配置
  * - updateOnlineASRConfig: 更新在线 ASR 子配置
  * - resetConfig: 重置为默认配置
  */
 export function useTranscriptionConfig() {
-  const [config, setConfig] = useState<TranscriptionConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<BrowserTranscriptionConfig>(DEFAULT_CONFIG);
   const [loaded, setLoaded] = useState(false);
 
   // 初始化：从 localStorage 加载
@@ -104,7 +93,7 @@ export function useTranscriptionConfig() {
   }, [config, loaded]);
 
   const updateConfig = useCallback(
-    (updates: Partial<TranscriptionConfig>) => {
+    (updates: Partial<BrowserTranscriptionConfig>) => {
       setConfig((prev) => ({ ...prev, ...updates }));
     },
     [],
@@ -113,16 +102,6 @@ export function useTranscriptionConfig() {
   const setActiveEngine = useCallback(
     (engine: TranscriptionEngineType) => {
       setConfig((prev) => ({ ...prev, activeEngine: engine }));
-    },
-    [],
-  );
-
-  const updateWhisperConfig = useCallback(
-    (updates: Partial<WhisperConfig>) => {
-      setConfig((prev) => ({
-        ...prev,
-        whisper: { ...prev.whisper, ...updates },
-      }));
     },
     [],
   );
@@ -146,7 +125,6 @@ export function useTranscriptionConfig() {
     loaded,
     updateConfig,
     setActiveEngine,
-    updateWhisperConfig,
     updateOnlineASRConfig,
     resetConfig,
   };

@@ -10,6 +10,11 @@ import { Copy, Check, ChevronDown, FileText, Clock } from 'lucide-react';
 import type { TranscribeSegment } from '@/types';
 import { TranscriptionRecord } from '@/types/transcription-history';
 import { useTranscriptionConfig } from '@/hooks/use-transcription-config';
+import {
+  createHelperEventSource,
+  helperRequest,
+  isHelperUnavailableError,
+} from '@/lib/local-helper-client';
 import { upsertCachedTranscriptionRecord } from '@/lib/transcription-browser-cache';
 
 interface TranscriptionDetailProps {
@@ -54,6 +59,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
   const copyMenuRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const doneRef = useRef(false);
 
   // 自动滚动到底部
@@ -65,136 +71,157 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
     });
   }, []);
 
-  // 连接 SSE
-  useEffect(() => {
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimeoutRef.current !== null) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+  }, []);
+
+  const closeEventSource = useCallback(() => {
+    clearReconnectTimer();
+    esRef.current?.close();
+    esRef.current = null;
+  }, [clearReconnectTimer]);
+
+  const connectToLiveRecord = useCallback((ignoreTerminalSnapshot = false) => {
     if (doneRef.current) return;
 
-    function connect() {
-      if (doneRef.current) return;
-      const es = new EventSource(`/api/transcription-live?id=${record.id}`);
-      esRef.current = es;
+    clearReconnectTimer();
+    esRef.current?.close();
 
-      es.onopen = () => setConnected(true);
+    const es = createHelperEventSource(`/transcriptions/${record.id}/live`);
+    let hasSeenActiveUpdate = false;
+    esRef.current = es;
 
-      es.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.success && payload.data) {
-            setLiveRecord(payload.data);
-            upsertCachedTranscriptionRecord(payload.data);
-            scrollToBottom();
+    es.onopen = () => {
+      setConnected(true);
+    };
 
-            if (payload.data.status === 'completed' || payload.data.status === 'error') {
-              doneRef.current = true;
-              setConnected(false);
-              es.close();
-            }
+    es.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as {
+          success?: boolean;
+          data?: TranscriptionRecord;
+        };
+
+        if (!payload.success || !payload.data) {
+          return;
+        }
+
+        const nextRecord = payload.data;
+        const isTerminal = nextRecord.status === 'completed' || nextRecord.status === 'error';
+
+        if (ignoreTerminalSnapshot && !hasSeenActiveUpdate && isTerminal) {
+          return;
+        }
+
+        if (!isTerminal) {
+          hasSeenActiveUpdate = true;
+        }
+
+        setLiveRecord(nextRecord);
+        upsertCachedTranscriptionRecord(nextRecord);
+        scrollToBottom();
+
+        if (isTerminal) {
+          doneRef.current = true;
+          setConnected(false);
+          if (esRef.current === es) {
+            esRef.current = null;
           }
-        } catch (e) {
-          console.error('SSE 解析失败:', e);
+          es.close();
         }
-      };
+      } catch (e) {
+        console.error('SSE 解析失败:', e);
+      }
+    };
 
-      es.onerror = () => {
-        setConnected(false);
-        es.close();
-        // 3s 后重连，仅在未完成时重连
+    es.onerror = () => {
+      setConnected(false);
+      es.close();
+
+      if (esRef.current === es) {
+        esRef.current = null;
+      }
+
+      if (doneRef.current) {
+        return;
+      }
+
+      clearReconnectTimer();
+      reconnectTimeoutRef.current = setTimeout(() => {
         if (!doneRef.current) {
-          setTimeout(connect, 3000);
+          connectToLiveRecord(ignoreTerminalSnapshot);
         }
-      };
-    }
+      }, 3000);
+    };
+  }, [clearReconnectTimer, record.id, scrollToBottom]);
 
-    connect();
+  // 连接 SSE
+  useEffect(() => {
+    doneRef.current = false;
+    connectToLiveRecord();
 
     return () => {
       doneRef.current = true;
-      esRef.current?.close();
+      setConnected(false);
+      closeEventSource();
     };
-  }, [record.id, scrollToBottom]);
+  }, [closeEventSource, connectToLiveRecord]);
 
   // 重新转录
   const handleRetranscribe = useCallback(async () => {
     setRetranscribing(true);
     try {
-      const res = await fetch('/api/retranscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          id: record.id,
+      const result = await helperRequest<{ success: boolean; error?: string }>(
+        `/transcriptions/${record.id}/retranscribe`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
           engine: config.activeEngine,
-          whisperConfig: config.whisper,
           onlineASRConfig: config.onlineASR,
-        }),
-      });
-      const result = await res.json();
+          }),
+        },
+      );
       if (!result.success) {
         console.error('重新转录失败:', result.error);
         setRetranscribing(false);
         return;
       }
 
-      // 重置状态，重新建立 SSE 连接
+      // 重置状态并切回统一的 SSE 重连逻辑
       doneRef.current = false;
-      esRef.current?.close();
-      setLiveRecord((prev) => ({
-        ...prev,
-        status: 'downloading_audio',
-        progress: 0,
-        segments: [],
-        transcript: undefined,
-        wordCount: undefined,
-        error: undefined,
-      }));
-      upsertCachedTranscriptionRecord({
+      setConnected(false);
+      closeEventSource();
+
+      const nextStatus = config.activeEngine === 'qwen-asr' ? 'transcribing' : 'downloading_audio';
+      const resetRecord: TranscriptionRecord = {
         ...liveRecord,
-        status: 'downloading_audio',
+        status: nextStatus,
         progress: 0,
         segments: [],
-        transcript: undefined,
+        transcript: '',
         wordCount: undefined,
+        language: undefined,
         error: undefined,
         updatedAt: new Date(),
-      });
+      };
 
-      // 延迟一点点再重连 SSE，等待服务端进度文件初始化
-      setTimeout(() => {
-        const es = new EventSource(`/api/transcription-live?id=${record.id}`);
-        esRef.current = es;
-        es.onopen = () => setConnected(true);
-        es.onmessage = (event) => {
-          try {
-            const payload = JSON.parse(event.data);
-            if (payload.success && payload.data) {
-              setLiveRecord(payload.data);
-              upsertCachedTranscriptionRecord(payload.data);
-              scrollToBottom();
-              if (payload.data.status === 'completed' || payload.data.status === 'error') {
-                doneRef.current = true;
-                setConnected(false);
-                es.close();
-              }
-            }
-          } catch (e) {
-            console.error('SSE 解析失败:', e);
-          }
-        };
-        es.onerror = () => {
-          setConnected(false);
-          es.close();
-          if (!doneRef.current) {
-            setTimeout(() => {
-              // 重连逻辑 - 会由 useEffect 中的 connect 自动处理
-            }, 3000);
-          }
-        };
-      }, 500);
+      setLiveRecord(resetRecord);
+      upsertCachedTranscriptionRecord(resetRecord);
+
+      connectToLiveRecord(true);
     } catch (error) {
+      if (isHelperUnavailableError(error)) {
+        console.error('本机 helper 未连接');
+      }
       console.error('重新转录请求失败:', error);
     } finally {
       setRetranscribing(false);
     }
-  }, [config, liveRecord, record.id, scrollToBottom]);
+  }, [closeEventSource, config, connectToLiveRecord, liveRecord, record.id]);
 
   const status = liveRecord.status;
   const segments: TranscribeSegment[] = liveRecord.segments ?? [];

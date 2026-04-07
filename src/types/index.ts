@@ -14,6 +14,7 @@ export interface WhisperConfig {
 }
 
 export interface WhisperStatus {
+  helperConnected: boolean;
   whisperInstalled: boolean;
   modelInstalled: boolean;
   ffmpegInstalled: boolean;
@@ -22,6 +23,8 @@ export interface WhisperStatus {
   modelName: string;
   modelSize: string; // 文件大小的可读字符串，如 "462 MB"
   ffmpegPath: string;
+  platform: string;
+  installMode: 'mixed';
 }
 
 export interface TranscribeSegment {
@@ -58,9 +61,11 @@ export interface OnlineASRConfig {
   enableITN: boolean;      // 逆文本正则化（数字/日期标准化）
 }
 
-/** 全局转录配置（前端 localStorage 存储） */
-export interface TranscriptionConfig {
+/** 浏览器本地配置（localStorage） */
+export interface BrowserTranscriptionConfig {
   activeEngine: TranscriptionEngineType;
-  whisper: WhisperConfig;
   onlineASR: OnlineASRConfig;
 }
+
+/** 兼容旧调用方，保留该类型名 */
+export type TranscriptionConfig = BrowserTranscriptionConfig;
