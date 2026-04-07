@@ -3,7 +3,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const os = require('os');
-const { randomUUID } = require('crypto');
+const { createHash, randomUUID } = require('crypto');
 const { spawn, execSync, execFileSync } = require('child_process');
 
 const APP_NAME = 'MemoFlow';
@@ -53,6 +53,8 @@ const MODELS_DIR = path.join(APP_DIR, 'models');
 const HISTORY_FILE = path.join(APP_DIR, 'transcription-history.json');
 const CONFIG_FILE = path.join(APP_DIR, 'whisper-config.json');
 const TEMP_DIR = path.join(os.tmpdir(), 'memo-flow-helper');
+const PLAIN_TRANSCRIPT_FILE = '纯文本.txt';
+const TIMESTAMPED_TRANSCRIPT_FILE = '逐字稿.txt';
 
 let downloadProgress = {
   status: 'idle',
@@ -134,6 +136,17 @@ function serializeRecord(record) {
   };
 }
 
+function normalizeSavedPath(inputPath) {
+  if (!inputPath) return '';
+  return path.resolve(String(inputPath));
+}
+
+function buildImportedRecordId(savedPath) {
+  const normalizedPath = normalizeSavedPath(savedPath);
+  const digest = createHash('sha1').update(normalizedPath).digest('hex').slice(0, 16);
+  return `import_${digest}`;
+}
+
 function isActiveTranscriptionStatus(status) {
   return (
     status === 'fetching_info' ||
@@ -199,6 +212,196 @@ async function reconcileInterruptedRecords() {
     history.lastUpdated = new Date().toISOString();
     await saveHistory(history);
   }
+}
+
+async function getFileMtimeMs(filePath) {
+  try {
+    const stats = await fsp.stat(filePath);
+    return stats.mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+function formatSecondsToImportTimestamp(totalSeconds) {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = Math.floor(safeSeconds % 60);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.000`;
+}
+
+function parseTimestampedTranscriptContent(content) {
+  const lines = normalizeLineBreaks(String(content || ''))
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) {
+    return { transcript: '', segments: [] };
+  }
+
+  const parsedLines = [];
+  let isStrictlyFormatted = true;
+
+  for (const line of lines) {
+    const match = line.match(/^(\d{2}):(\d{2})\t(.+)$/);
+    if (!match) {
+      isStrictlyFormatted = false;
+      break;
+    }
+
+    const minutes = Number.parseInt(match[1], 10);
+    const seconds = Number.parseInt(match[2], 10);
+    parsedLines.push({
+      startSeconds: minutes * 60 + seconds,
+      text: match[3].trim(),
+    });
+  }
+
+  if (!isStrictlyFormatted) {
+    return {
+      transcript: lines
+        .map((line) => {
+          const parts = line.split('\t');
+          return parts.length > 1 ? parts.slice(1).join('\t').trim() : line;
+        })
+        .filter(Boolean)
+        .join('\n'),
+      segments: [],
+    };
+  }
+
+  const segments = parsedLines.map((line, index) => {
+    const nextLine = parsedLines[index + 1];
+    const endSeconds = nextLine ? Math.max(line.startSeconds + 1, nextLine.startSeconds) : line.startSeconds + 1;
+
+    return {
+      timestamp: `[${formatSecondsToImportTimestamp(line.startSeconds)} --> ${formatSecondsToImportTimestamp(endSeconds)}]`,
+      text: line.text,
+    };
+  });
+
+  return {
+    transcript: parsedLines.map((line) => line.text).join('\n'),
+    segments,
+  };
+}
+
+async function buildImportedRecordFromDirectory(directoryPath) {
+  const savedPath = normalizeSavedPath(directoryPath);
+  const title = path.basename(savedPath);
+  const plainTextPath = path.join(savedPath, PLAIN_TRANSCRIPT_FILE);
+  const timestampedTextPath = path.join(savedPath, TIMESTAMPED_TRANSCRIPT_FILE);
+
+  const [plainTextExists, timestampedTextExists] = await Promise.all([
+    fsp.access(plainTextPath).then(() => true).catch(() => false),
+    fsp.access(timestampedTextPath).then(() => true).catch(() => false),
+  ]);
+
+  if (!plainTextExists && !timestampedTextExists) {
+    return null;
+  }
+
+  let transcript = '';
+  let segments = [];
+
+  if (timestampedTextExists) {
+    const timestampedContent = await fsp.readFile(timestampedTextPath, 'utf8');
+    const parsedTimestamped = parseTimestampedTranscriptContent(timestampedContent);
+    transcript = parsedTimestamped.transcript;
+    segments = parsedTimestamped.segments;
+  }
+
+  if (plainTextExists) {
+    transcript = (await fsp.readFile(plainTextPath, 'utf8')).trim();
+  } else {
+    transcript = transcript.trim();
+  }
+
+  const mtimes = (
+    await Promise.all([
+      plainTextExists ? getFileMtimeMs(plainTextPath) : Promise.resolve(null),
+      timestampedTextExists ? getFileMtimeMs(timestampedTextPath) : Promise.resolve(null),
+    ])
+  ).filter((value) => typeof value === 'number');
+
+  const timestamp = mtimes.length ? new Date(Math.max(...mtimes)) : new Date();
+  const id = buildImportedRecordId(savedPath);
+
+  return serializeRecord({
+    id,
+    taskId: id,
+    title,
+    status: 'completed',
+    progress: 100,
+    transcript,
+    segments,
+    wordCount: transcript.length,
+    language: 'zh',
+    savedPath,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+}
+
+async function importMissingTranscriptHistory(config) {
+  const outputDir = normalizeSavedPath(resolveConfigPath(config.outputDir));
+  if (!outputDir) return 0;
+
+  let entries;
+  try {
+    entries = await fsp.readdir(outputDir, { withFileTypes: true });
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return 0;
+    }
+    console.error('[MemoFlow Helper] failed to scan transcript output directory:', error);
+    return 0;
+  }
+
+  return runWithHistoryMutation(async () => {
+    const history = await loadHistory();
+    const knownPaths = new Set(
+      history.records
+        .map((record) => normalizeSavedPath(record.savedPath))
+        .filter(Boolean),
+    );
+    const importedRecords = [];
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+
+      const directoryPath = path.join(outputDir, entry.name);
+      const normalizedDirectoryPath = normalizeSavedPath(directoryPath);
+      if (knownPaths.has(normalizedDirectoryPath)) {
+        continue;
+      }
+
+      try {
+        const importedRecord = await buildImportedRecordFromDirectory(directoryPath);
+        if (!importedRecord) {
+          continue;
+        }
+
+        importedRecords.push(importedRecord);
+        knownPaths.add(normalizedDirectoryPath);
+      } catch (error) {
+        console.error(`[MemoFlow Helper] failed to import transcript history from ${directoryPath}:`, error);
+      }
+    }
+
+    if (!importedRecords.length) {
+      return 0;
+    }
+
+    history.records = [...importedRecords, ...history.records];
+    history.lastUpdated = new Date().toISOString();
+    await saveHistory(history);
+    return importedRecords.length;
+  });
 }
 
 function getDefaultModelName() {
@@ -1884,8 +2087,9 @@ async function handleRequest(req, res) {
 
 async function start() {
   await ensureAppDirs();
-  await loadConfig();
+  const config = await loadConfig();
   await reconcileInterruptedRecords();
+  const importedCount = await importMissingTranscriptHistory(config);
   const server = http.createServer((req, res) => {
     handleRequest(req, res).catch((error) => {
       sendJson(res, 500, {
@@ -1898,6 +2102,9 @@ async function start() {
   server.listen(PORT, HOST, () => {
     console.log(`[MemoFlow Helper] listening on http://${HOST}:${PORT}`);
     console.log(`[MemoFlow Helper] app data dir: ${APP_DIR}`);
+    if (importedCount > 0) {
+      console.log(`[MemoFlow Helper] imported ${importedCount} transcript record(s) from ${config.outputDir}`);
+    }
   });
 }
 

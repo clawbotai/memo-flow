@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import TranscriptionCard from '@/components/transcription-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FlowLoader } from '@/components/ui/flow-loader';
@@ -16,29 +16,53 @@ export default function TranscriptionsPage() {
   const [records, setRecords] = useState<TranscriptionRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadRecords = async () => {
-      try {
-        const result = await helperRequest<{
-          success: boolean;
-          data: TranscriptionRecord[];
-        }>('/transcriptions');
+  const loadRecords = useCallback(async (showLoading = false) => {
+    if (showLoading) {
+      setLoading(true);
+    }
 
-        if (result.success) {
-          setRecords(mergeCachedTranscriptionHistory(result.data));
-        } else {
-          setRecords(readCachedTranscriptionHistory());
-        }
-      } catch (error) {
-        console.error('加载转录历史失败:', error);
+    try {
+      const result = await helperRequest<{
+        success: boolean;
+        data: TranscriptionRecord[];
+      }>('/transcriptions');
+
+      if (result.success) {
+        setRecords(mergeCachedTranscriptionHistory(result.data));
+      } else {
         setRecords(readCachedTranscriptionHistory());
-      } finally {
-        setLoading(false);
+      }
+    } catch (error) {
+      console.error('加载转录历史失败:', error);
+      setRecords(readCachedTranscriptionHistory());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRecords(true);
+  }, [loadRecords]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      loadRecords(false);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadRecords(false);
       }
     };
 
-    loadRecords();
-  }, []);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loadRecords]);
 
   return (
     <div className="min-h-full bg-background relative overflow-hidden">

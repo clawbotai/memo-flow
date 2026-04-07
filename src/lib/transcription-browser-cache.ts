@@ -3,6 +3,7 @@
 import type { TranscriptionRecord } from '@/types/transcription-history';
 
 const CACHE_KEY = 'linksy-transcription-history-cache';
+const CACHE_RECORD_LIMIT = 100;
 
 function normalizeRecord(record: TranscriptionRecord): TranscriptionRecord {
   return {
@@ -30,6 +31,65 @@ function mergeRecords(records: TranscriptionRecord[]): TranscriptionRecord[] {
   );
 }
 
+function toCachedRecord(record: TranscriptionRecord): TranscriptionRecord {
+  return {
+    id: record.id,
+    taskId: record.taskId,
+    title: record.title,
+    status: record.status,
+    progress: record.progress,
+    audioUrl: record.audioUrl,
+    wordCount: record.wordCount,
+    savedPath: record.savedPath,
+    error: record.error,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    language: record.language,
+    duration: record.duration,
+    segments: [],
+    transcript: undefined,
+  };
+}
+
+function isQuotaExceededError(error: unknown): boolean {
+  return error instanceof DOMException && (
+    error.name === 'QuotaExceededError' ||
+    error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+  );
+}
+
+function createStorageCandidate(records: TranscriptionRecord[], limit: number): TranscriptionRecord[] {
+  return records.slice(0, limit).map(toCachedRecord);
+}
+
+function persistHistory(records: TranscriptionRecord[]): void {
+  const candidates = [
+    createStorageCandidate(records, CACHE_RECORD_LIMIT),
+    createStorageCandidate(records, 50),
+    createStorageCandidate(records, 20),
+    createStorageCandidate(records, 10),
+  ];
+
+  let lastError: unknown = null;
+
+  for (const candidate of candidates) {
+    try {
+      window.localStorage.setItem(CACHE_KEY, JSON.stringify(candidate));
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isQuotaExceededError(error)) {
+        console.error('写入转录缓存失败:', error);
+        return;
+      }
+    }
+  }
+
+  if (lastError) {
+    console.warn('转录缓存已超过浏览器配额，已跳过本次持久化。');
+  }
+}
+
 export function readCachedTranscriptionHistory(): TranscriptionRecord[] {
   if (typeof window === 'undefined') {
     return [];
@@ -46,7 +106,7 @@ export function readCachedTranscriptionHistory(): TranscriptionRecord[] {
       return [];
     }
 
-    return mergeRecords(parsed);
+    return mergeRecords(parsed.map(normalizeRecord).map(toCachedRecord));
   } catch {
     return [];
   }
@@ -58,7 +118,7 @@ export function writeCachedTranscriptionHistory(records: TranscriptionRecord[]):
   }
 
   const merged = mergeRecords(records);
-  window.localStorage.setItem(CACHE_KEY, JSON.stringify(merged));
+  persistHistory(merged);
   return merged;
 }
 
@@ -76,7 +136,7 @@ export function upsertCachedTranscriptionRecord(record: TranscriptionRecord): Tr
 export function removeCachedTranscriptionRecord(id: string): TranscriptionRecord[] {
   const next = readCachedTranscriptionHistory().filter((record) => record.id !== id);
   if (typeof window !== 'undefined') {
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify(next));
+    persistHistory(next);
   }
   return next;
 }
