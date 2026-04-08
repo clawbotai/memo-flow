@@ -51,14 +51,9 @@ export function DesktopTranscriptionDetailPage() {
   return (
     <PageScene containerClassName="max-w-7xl">
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold">转录详情</h1>
-          <p className="mt-1 text-muted-foreground">查看转录任务的详细信息和实时进度</p>
-        </div>
-
         <Card>
           <CardHeader>
-            <CardTitle>转录任务信息</CardTitle>
+            <CardTitle>{record?.title ?? "转录任务信息"}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
