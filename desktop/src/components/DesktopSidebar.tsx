@@ -82,7 +82,6 @@ export function DesktopSidebar({ open, onOpenSettings }: DesktopSidebarProps) {
         <h1 className="bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-xl font-semibold text-transparent">
           Linksy
         </h1>
-        <p className="mt-1 text-xs text-muted-foreground">Audio into reusable knowledge</p>
       </div>
 
       <div className="flex-1 px-3 py-2">

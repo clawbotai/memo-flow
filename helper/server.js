@@ -28,10 +28,13 @@ const FILETRANS_POLL_INTERVAL_MS = 2000;
 const FILETRANS_TIMEOUT_MS = 20 * 60 * 1000;
 const WHISPER_TIMEOUT_MS = 30 * 60 * 1000;
 const SSE_HEARTBEAT_INTERVAL_MS = 10000;
+const INSTALL_LOG_TAIL_LIMIT = 80;
 const TRANSCRIPTION_PROGRESS_START = 25;
 const TRANSCRIPTION_PROGRESS_END = 95;
 const DEFAULT_QWEN_BASE_URL = 'https://dashscope.aliyuncs.com/api/v1';
 const DEFAULT_QWEN_TEST_MODEL = 'qwen-plus';
+const HOMEBREW_INSTALL_COMMAND =
+  '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
 
 function getAppDataDir() {
   if (process.env.MEMOFLOW_HELPER_DATA_DIR) {
@@ -65,12 +68,22 @@ let downloadProgress = {
   modelName: 'small',
 };
 
+let localRuntimeInstallProgress = {
+  status: 'idle',
+  currentStep: undefined,
+  message: '等待安装',
+  progress: 0,
+  logsTail: [],
+};
+
 const modelDownloadClients = new Set();
+const localRuntimeInstallClients = new Set();
 const liveClients = new Map();
 const activeTasks = new Map();
 let historyMutationChain = Promise.resolve();
 let serverInstance = null;
 let startPromise = null;
+let localRuntimeInstallPromise = null;
 
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload);
@@ -418,6 +431,12 @@ function getDefaultWhisperPath() {
 
 function getDefaultFfmpegPath() {
   return process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+}
+
+function isDefaultBinaryConfigPath(kind, inputPath) {
+  if (!inputPath) return true;
+  const expected = kind === 'whisper' ? getDefaultWhisperPath() : getDefaultFfmpegPath();
+  return String(inputPath).trim() === expected;
 }
 
 function getDefaultOutputDir() {
@@ -829,6 +848,129 @@ function canRunExecutable(inputPath, args) {
   }
 }
 
+function isValidHomebrewExecutable(inputPath) {
+  return canRunExecutable(inputPath, ['--version']);
+}
+
+function findWorkingExecutable(candidates, args) {
+  const seen = new Set();
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const normalized = String(candidate).trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+
+    if (!canRunExecutable(normalized, args)) {
+      continue;
+    }
+
+    return resolveExecutablePath(normalized) || normalized;
+  }
+
+  return null;
+}
+
+function detectHomebrewPath() {
+  if (process.platform !== 'darwin') {
+    return null;
+  }
+
+  return findWorkingExecutable(
+    ['/opt/homebrew/bin/brew', '/usr/local/bin/brew', 'brew'],
+    ['--version'],
+  );
+}
+
+function getBrewFormulaExecutableCandidates(homebrewPath, formulaName, executableNames) {
+  if (!homebrewPath) {
+    return [];
+  }
+
+  try {
+    const prefix = execFileSync(homebrewPath, ['--prefix', formulaName], {
+      timeout: 10000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: buildBaseEnv(),
+    })
+      .toString()
+      .trim();
+
+    if (!prefix) {
+      return [];
+    }
+
+    return executableNames.map((name) => path.join(prefix, 'bin', name));
+  } catch {
+    return [];
+  }
+}
+
+function getDetectedWhisperCandidates(homebrewPath) {
+  return [
+    'whisper-cli',
+    '/opt/homebrew/bin/whisper-cli',
+    '/usr/local/bin/whisper-cli',
+    'whisper-cpp',
+    '/opt/homebrew/bin/whisper-cpp',
+    '/usr/local/bin/whisper-cpp',
+    ...getBrewFormulaExecutableCandidates(homebrewPath, 'whisper-cpp', [
+      'whisper-cli',
+      'whisper-cpp',
+      'main',
+    ]),
+  ];
+}
+
+function getDetectedFfmpegCandidates(homebrewPath) {
+  return [
+    'ffmpeg',
+    '/opt/homebrew/bin/ffmpeg',
+    '/usr/local/bin/ffmpeg',
+    ...getBrewFormulaExecutableCandidates(homebrewPath, 'ffmpeg', ['ffmpeg']),
+  ];
+}
+
+function resolveRuntimeExecutable(kind, configuredPath, homebrewPath, isManagedPath = false) {
+  const args = kind === 'whisper' ? ['-h'] : ['-version'];
+  const configuredPathRaw = String(configuredPath || '').trim();
+  const configuredIsUserDefined =
+    Boolean(configuredPathRaw) &&
+    !isDefaultBinaryConfigPath(kind, configuredPathRaw) &&
+    !isManagedPath;
+
+  if (configuredIsUserDefined && canRunExecutable(configuredPathRaw, args)) {
+    return {
+      configuredPath: configuredPathRaw,
+      effectivePath: resolveExecutablePath(configuredPathRaw) || configuredPathRaw,
+      source: 'configured',
+      installed: true,
+    };
+  }
+
+  const detectedCandidates =
+    kind === 'whisper'
+      ? getDetectedWhisperCandidates(homebrewPath)
+      : getDetectedFfmpegCandidates(homebrewPath);
+  const detectedPath = findWorkingExecutable(detectedCandidates, args);
+
+  if (detectedPath) {
+    return {
+      configuredPath: configuredPathRaw,
+      effectivePath: detectedPath,
+      source: 'detected',
+      installed: true,
+    };
+  }
+
+  return {
+    configuredPath: configuredPathRaw,
+    effectivePath: undefined,
+    source: 'missing',
+    installed: false,
+  };
+}
+
 function isValidWhisperExecutable(inputPath) {
   return canRunExecutable(inputPath, ['-h']);
 }
@@ -859,16 +1001,57 @@ function formatFileSize(bytes) {
 function buildWhisperStatus(config) {
   const resolvedModelPath = resolveConfigPath(config.modelPath);
   const modelInstalled = Boolean(resolvedModelPath && fs.existsSync(resolvedModelPath));
+  const homebrewPath = detectHomebrewPath();
+  const homebrewInstalled = Boolean(homebrewPath);
+  const whisperRuntime = resolveRuntimeExecutable(
+    'whisper',
+    config.whisperPath,
+    homebrewPath,
+    Boolean(config.whisperPathManaged),
+  );
+  const ffmpegRuntime = resolveRuntimeExecutable(
+    'ffmpeg',
+    config.ffmpegPath,
+    homebrewPath,
+    Boolean(config.ffmpegPathManaged),
+  );
   let modelSize = '0 B';
   if (modelInstalled) {
     modelSize = formatFileSize(fs.statSync(resolvedModelPath).size);
   }
 
+  const missingRequirements = [];
+  if (!whisperRuntime.installed) {
+    if (!homebrewInstalled && process.platform === 'darwin') {
+      missingRequirements.push('homebrew');
+    }
+    missingRequirements.push('whisper');
+  }
+  if (!ffmpegRuntime.installed) {
+    if (!homebrewInstalled && process.platform === 'darwin') {
+      missingRequirements.push('homebrew');
+    }
+    missingRequirements.push('ffmpeg');
+  }
+  if (!modelInstalled) {
+    missingRequirements.push('model');
+  }
+
   return {
     helperConnected: true,
-    whisperInstalled: isValidWhisperExecutable(config.whisperPath),
+    homebrewInstalled,
+    whisperInstalled: whisperRuntime.installed,
     modelInstalled,
-    ffmpegInstalled: isValidFfmpegExecutable(config.ffmpegPath),
+    ffmpegInstalled: ffmpegRuntime.installed,
+    autoInstallSupported: process.platform === 'darwin',
+    homebrewPath: homebrewPath || '',
+    configuredWhisperPath: config.whisperPath || '',
+    configuredFfmpegPath: config.ffmpegPath || '',
+    effectiveWhisperPath: whisperRuntime.effectivePath || '',
+    effectiveFfmpegPath: ffmpegRuntime.effectivePath || '',
+    whisperSource: whisperRuntime.source,
+    ffmpegSource: ffmpegRuntime.source,
+    missingRequirements: Array.from(new Set(missingRequirements)),
     whisperPath: config.whisperPath,
     modelPath: config.modelPath,
     modelName: config.modelName || inferModelName(config.modelPath),
@@ -877,6 +1060,222 @@ function buildWhisperStatus(config) {
     platform: process.platform,
     installMode: 'mixed',
   };
+}
+
+async function syncDetectedRuntimeIntoConfig() {
+  const config = await loadConfig();
+  const status = buildWhisperStatus(config);
+  let changed = false;
+
+  if (
+    (!String(config.whisperPath || '').trim() || !isValidWhisperExecutable(config.whisperPath)) &&
+    status.effectiveWhisperPath
+  ) {
+    config.whisperPath = status.effectiveWhisperPath;
+    config.whisperPathManaged = true;
+    changed = true;
+  }
+
+  if (
+    (!String(config.ffmpegPath || '').trim() || !isValidFfmpegExecutable(config.ffmpegPath)) &&
+    status.effectiveFfmpegPath
+  ) {
+    config.ffmpegPath = status.effectiveFfmpegPath;
+    config.ffmpegPathManaged = true;
+    changed = true;
+  }
+
+  if (changed) {
+    await saveConfig(config);
+  }
+
+  return buildWhisperStatus(await loadConfig());
+}
+
+function normalizeInstallComponents(components) {
+  const allowed = new Set(['homebrew', 'whisper', 'ffmpeg']);
+  const next = [];
+
+  for (const component of Array.isArray(components) ? components : []) {
+    if (!allowed.has(component) || next.includes(component)) {
+      continue;
+    }
+    next.push(component);
+  }
+
+  return next;
+}
+
+async function runLoggedCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      env: buildBaseEnv(),
+      ...options,
+    });
+
+    let stderr = '';
+    let stdout = '';
+
+    child.stdout?.on('data', (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      appendLocalRuntimeInstallLogs(text);
+    });
+
+    child.stderr?.on('data', (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      appendLocalRuntimeInstallLogs(text);
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      const details = stripAnsi(stderr || stdout).trim();
+      reject(
+        new Error(
+          details ? `命令执行失败 (${code})\n${details}` : `命令执行失败，退出码 ${code}`,
+        ),
+      );
+    });
+  });
+}
+
+async function ensureHomebrewInstalled() {
+  const existingPath = detectHomebrewPath();
+  if (existingPath) {
+    appendLocalRuntimeInstallLogs(`已检测到 Homebrew: ${existingPath}`);
+    return existingPath;
+  }
+
+  updateLocalRuntimeInstallProgress({
+    status: 'running',
+    currentStep: 'installing_homebrew',
+    message: '正在安装 Homebrew...',
+    progress: 10,
+  });
+
+  await runLoggedCommand(
+    '/bin/bash',
+    ['-lc', HOMEBREW_INSTALL_COMMAND],
+    {
+      stdio: ['inherit', 'pipe', 'pipe'],
+      env: {
+        ...buildBaseEnv(),
+      },
+    },
+  );
+
+  const installedPath = detectHomebrewPath();
+  if (!installedPath) {
+    throw new Error('Homebrew 安装完成后仍未检测到 brew');
+  }
+
+  appendLocalRuntimeInstallLogs(`Homebrew 安装完成: ${installedPath}`);
+  return installedPath;
+}
+
+async function ensureFormulaInstalled(component, homebrewPath) {
+  const mapping = {
+    whisper: {
+      formula: 'whisper-cpp',
+      step: 'installing_whisper',
+      message: '正在安装 whisper.cpp...',
+      progress: 55,
+      validate: () => resolveRuntimeExecutable('whisper', '', detectHomebrewPath()),
+    },
+    ffmpeg: {
+      formula: 'ffmpeg',
+      step: 'installing_ffmpeg',
+      message: '正在安装 ffmpeg...',
+      progress: 85,
+      validate: () => resolveRuntimeExecutable('ffmpeg', '', detectHomebrewPath()),
+    },
+  };
+
+  const current = mapping[component];
+  if (!current) {
+    throw new Error(`不支持的安装组件: ${component}`);
+  }
+
+  const runtime = current.validate();
+  if (runtime.installed) {
+    appendLocalRuntimeInstallLogs(`${current.formula} 已可用，跳过安装`);
+    return;
+  }
+
+  updateLocalRuntimeInstallProgress({
+    status: 'running',
+    currentStep: current.step,
+    message: current.message,
+    progress: current.progress,
+  });
+
+  await runLoggedCommand(homebrewPath, ['install', current.formula], {
+    env: {
+      ...buildBaseEnv(),
+      HOMEBREW_NO_AUTO_UPDATE: '1',
+      CI: '1',
+    },
+  });
+
+  const nextRuntime = current.validate();
+  if (!nextRuntime.installed) {
+    throw new Error(`${current.formula} 安装完成后仍未检测到可执行文件`);
+  }
+
+  appendLocalRuntimeInstallLogs(`${current.formula} 安装完成`);
+}
+
+async function installLocalRuntime(requestedComponents) {
+  if (process.platform !== 'darwin') {
+    throw new Error('一键安装当前仅支持 macOS');
+  }
+
+  const requested = normalizeInstallComponents(requestedComponents);
+  if (!requested.length) {
+    throw new Error('未指定要安装的组件');
+  }
+
+  updateLocalRuntimeInstallProgress({
+    status: 'running',
+    currentStep: undefined,
+    message: '准备检查本地环境...',
+    progress: 0,
+    logsTail: [],
+  });
+
+  const shouldInstallBinaries = requested.includes('whisper') || requested.includes('ffmpeg');
+  let homebrewPath = detectHomebrewPath();
+
+  if (requested.includes('homebrew') || (shouldInstallBinaries && !homebrewPath)) {
+    homebrewPath = await ensureHomebrewInstalled();
+  }
+
+  if (!homebrewPath && shouldInstallBinaries) {
+    throw new Error('未检测到 Homebrew，无法继续安装 whisper.cpp / ffmpeg');
+  }
+
+  if (requested.includes('whisper')) {
+    await ensureFormulaInstalled('whisper', homebrewPath);
+  }
+
+  if (requested.includes('ffmpeg')) {
+    await ensureFormulaInstalled('ffmpeg', homebrewPath);
+  }
+
+  const status = await syncDetectedRuntimeIntoConfig();
+  updateLocalRuntimeInstallProgress({
+    status: 'succeeded',
+    currentStep: undefined,
+    message: '本地依赖安装完成',
+    progress: 100,
+  });
+  return status;
 }
 
 function createRecordUpdateEmitter(taskId) {
@@ -935,6 +1334,39 @@ function emitDownloadProgress() {
       modelDownloadClients.delete(res);
     }
   }
+}
+
+function emitLocalRuntimeInstallProgress() {
+  for (const res of localRuntimeInstallClients) {
+    if (!writeSse(res, localRuntimeInstallProgress)) {
+      localRuntimeInstallClients.delete(res);
+    }
+  }
+}
+
+function updateLocalRuntimeInstallProgress(patch) {
+  localRuntimeInstallProgress = {
+    ...localRuntimeInstallProgress,
+    ...patch,
+  };
+  emitLocalRuntimeInstallProgress();
+}
+
+function appendLocalRuntimeInstallLogs(text) {
+  const lines = normalizeLineBreaks(String(text || ''))
+    .split('\n')
+    .map((line) => stripAnsi(line).trimEnd())
+    .filter(Boolean);
+
+  if (!lines.length) {
+    return;
+  }
+
+  localRuntimeInstallProgress = {
+    ...localRuntimeInstallProgress,
+    logsTail: [...localRuntimeInstallProgress.logsTail, ...lines].slice(-INSTALL_LOG_TAIL_LIMIT),
+  };
+  emitLocalRuntimeInstallProgress();
 }
 
 async function addRecord(record) {
@@ -1488,7 +1920,14 @@ async function convertToWav(inputPath, ffmpegPath, context) {
   return wavPath;
 }
 
-async function runWhisperStreaming(wavPath, config, context, onSegment, onProgress) {
+async function runWhisperStreaming(
+  wavPath,
+  config,
+  whisperExecutablePath,
+  context,
+  onSegment,
+  onProgress,
+) {
   const srtPath = `${wavPath}.srt`;
   context.tempFiles.add(srtPath);
   const parser = createWhisperOutputParser({ onSegment, onProgress });
@@ -1496,7 +1935,7 @@ async function runWhisperStreaming(wavPath, config, context, onSegment, onProgre
 
   await new Promise((resolve, reject) => {
     const child = spawn(
-      resolveConfigPath(config.whisperPath) || config.whisperPath,
+      resolveConfigPath(whisperExecutablePath) || whisperExecutablePath,
       [
         '-m',
         resolveConfigPath(config.modelPath),
@@ -1510,7 +1949,7 @@ async function runWhisperStreaming(wavPath, config, context, onSegment, onProgre
         '--output-srt',
         '-ng',
       ],
-      buildExecOptions(config.whisperPath),
+      buildExecOptions(whisperExecutablePath),
     );
 
     context.children.add(child);
@@ -1574,6 +2013,7 @@ async function saveTranscriptionResult(record, transcript, segments, meta, prefe
 async function runEngine(context, record, engine, onlineASRConfig) {
   const updateRecord = createRecordUpdateEmitter(record.id);
   const config = await loadConfig();
+  const runtimeStatus = buildWhisperStatus(config);
 
   if (engine === 'qwen-asr') {
     await updateRecord({
@@ -1624,10 +2064,10 @@ async function runEngine(context, record, engine, onlineASRConfig) {
     return;
   }
 
-  if (!isValidWhisperExecutable(config.whisperPath)) {
+  if (!runtimeStatus.effectiveWhisperPath) {
     throw new Error('whisper.cpp 未安装或路径无效，请在设置中填写本机路径');
   }
-  if (!isValidFfmpegExecutable(config.ffmpegPath)) {
+  if (!runtimeStatus.effectiveFfmpegPath) {
     throw new Error('ffmpeg 未安装或路径无效，请在设置中填写本机路径');
   }
   if (!fs.existsSync(resolveConfigPath(config.modelPath))) {
@@ -1652,7 +2092,7 @@ async function runEngine(context, record, engine, onlineASRConfig) {
     progress: 20,
   });
 
-  const wavPath = await convertToWav(audioPath, config.ffmpegPath, context);
+  const wavPath = await convertToWav(audioPath, runtimeStatus.effectiveFfmpegPath, context);
   throwIfCancelled(context);
 
   const segments = [];
@@ -1695,6 +2135,7 @@ async function runEngine(context, record, engine, onlineASRConfig) {
         ...config,
         threads: effectiveThreads,
       },
+      runtimeStatus.effectiveWhisperPath,
       context,
       async (segment) => {
         throwIfCancelled(context);
@@ -2031,6 +2472,12 @@ async function handleRequest(req, res) {
         next.modelPath = getDefaultModelPath(next.modelName);
       }
       next.threads = Math.max(1, Number.parseInt(String(next.threads || current.threads || 4), 10));
+      if (Object.prototype.hasOwnProperty.call(body, 'whisperPath')) {
+        next.whisperPathManaged = false;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'ffmpegPath')) {
+        next.ffmpegPathManaged = false;
+      }
       await saveConfig(next);
       sendJson(res, 200, { success: true, data: next });
       return;
@@ -2039,6 +2486,55 @@ async function handleRequest(req, res) {
     if (req.method === 'GET' && pathname === '/whisper/status') {
       const config = await loadConfig();
       sendJson(res, 200, { success: true, data: buildWhisperStatus(config) });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/local-runtime/install') {
+      const body = await readJsonBody(req);
+      const components = normalizeInstallComponents(body.components);
+
+      if (!components.length) {
+        sendJson(res, 400, { success: false, error: '未指定要安装的组件' });
+        return;
+      }
+
+      if (process.platform !== 'darwin') {
+        sendJson(res, 400, { success: false, error: '一键安装当前仅支持 macOS' });
+        return;
+      }
+
+      if (localRuntimeInstallPromise) {
+        sendJson(res, 409, { success: false, error: '已有安装任务正在运行' });
+        return;
+      }
+
+      localRuntimeInstallPromise = installLocalRuntime(components)
+        .catch((error) => {
+          appendLocalRuntimeInstallLogs(
+            error instanceof Error ? error.message : '本地依赖安装失败',
+          );
+          updateLocalRuntimeInstallProgress({
+            status: 'failed',
+            currentStep: localRuntimeInstallProgress.currentStep,
+            message: error instanceof Error ? error.message : '本地依赖安装失败',
+          });
+        })
+        .finally(() => {
+          localRuntimeInstallPromise = null;
+        });
+
+      sendJson(res, 200, { success: true, data: { components } });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/local-runtime/install-progress') {
+      const heartbeat = openSse(res);
+      localRuntimeInstallClients.add(res);
+      writeSse(res, localRuntimeInstallProgress);
+      req.on('close', () => {
+        clearInterval(heartbeat);
+        localRuntimeInstallClients.delete(res);
+      });
       return;
     }
 
@@ -2200,6 +2696,7 @@ async function start() {
 
   await ensureAppDirs();
   const config = await loadConfig();
+  await syncDetectedRuntimeIntoConfig();
   await reconcileInterruptedRecords();
   const importedCount = await importMissingTranscriptHistory(config);
   const server = http.createServer((req, res) => {

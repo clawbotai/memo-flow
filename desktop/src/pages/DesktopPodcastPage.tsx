@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,13 +16,15 @@ import {
   helperRequest,
   isHelperUnavailableError,
 } from "@/lib/local-helper-client";
+import { normalizeWhisperStatus } from "@/lib/whisper-status";
 import {
   mergeCachedTranscriptionHistory,
   readCachedTranscriptionHistory,
   removeCachedTranscriptionRecord,
   upsertCachedTranscriptionRecord,
 } from "@/lib/transcription-browser-cache";
-import type { TranscribeSegment } from "@/types";
+import type { TranscribeSegment, WhisperStatus } from "@/types";
+import type { DesktopShellContext } from "@desktop/components/DesktopAppShell";
 import type { TranscriptionRecord } from "@/types/transcription-history";
 import { DesktopTranscriptionCard } from "@desktop/components/DesktopTranscriptionCard";
 import { PageScene } from "@desktop/components/PageScene";
@@ -42,11 +45,20 @@ const STATUS_STAGE_MAP: Record<string, string> = {
   error: "转录失败",
 };
 
+const LOCAL_RUNTIME_REQUIREMENT_LABELS: Record<string, string> = {
+  homebrew: "Homebrew",
+  whisper: "whisper.cpp",
+  ffmpeg: "ffmpeg",
+  model: "模型文件",
+};
+
 export function DesktopPodcastPage() {
   const { config } = useTranscriptionConfig();
+  const { openSettings } = useOutletContext<DesktopShellContext>();
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error" | "info";
+    duration?: number;
   } | null>(null);
   const [podcastUrl, setPodcastUrl] = useState("");
   const [podcastTranscript, setPodcastTranscript] = useState("");
@@ -289,6 +301,61 @@ export function DesktopPodcastPage() {
     };
   }, [closeEventSource]);
 
+  const buildLocalRuntimeGuidance = useCallback((status: WhisperStatus) => {
+    const missingRequirements = status.missingRequirements.filter(
+      (item) => item === "homebrew" || item === "whisper" || item === "ffmpeg" || item === "model",
+    );
+    const requirementText = missingRequirements
+      .map((item) => LOCAL_RUNTIME_REQUIREMENT_LABELS[item] || item)
+      .join("、");
+    const needsBinaryInstall = missingRequirements.some(
+      (item) => item === "homebrew" || item === "whisper" || item === "ffmpeg",
+    );
+    const needsModel = missingRequirements.includes("model");
+
+    if (needsBinaryInstall && needsModel) {
+      return `本地 Whisper 还缺少 ${requirementText}。已为你打开「Whisper 设置」；先安装所需组件，再下载模型后重新转录。`;
+    }
+
+    if (needsBinaryInstall) {
+      return `本地 Whisper 还缺少 ${requirementText}。已为你打开「Whisper 设置」；可先点“一键安装所需组件”，或手动填写本机路径。`;
+    }
+
+    return `本地 Whisper 还缺少 ${requirementText}。已为你打开「Whisper 设置」；先下载模型后再重新转录。`;
+  }, []);
+
+  const loadLocalRuntimeStatus = useCallback(async () => {
+    try {
+      const result = await helperRequest<{
+        success: boolean;
+        data: WhisperStatus;
+      }>("/whisper/status");
+
+      if (result.success) {
+        return normalizeWhisperStatus(result.data);
+      }
+
+      openSettings("whisper");
+      setToast({
+        message: "本地 Whisper 环境读取失败。已为你打开「Whisper 设置」，请检查 helper、可执行路径和模型配置后再重试。",
+        type: "error",
+        duration: 6000,
+      });
+      return null;
+    } catch (error) {
+      console.error("加载本地转录环境状态失败:", error);
+      openSettings("whisper");
+      setToast({
+        message: isHelperUnavailableError(error)
+          ? "未检测到本机 helper 服务。已为你打开「Whisper 设置」；请先在终端运行 npm run helper，再回来重新转录。"
+          : "本地 Whisper 环境读取失败。已为你打开「Whisper 设置」，请检查 helper、可执行路径和模型配置后再重试。",
+        type: "error",
+        duration: 6000,
+      });
+      return null;
+    }
+  }, [openSettings]);
+
   const handlePodcastTranscribe = useCallback(
     async (event: React.FormEvent) => {
       event.preventDefault();
@@ -316,39 +383,33 @@ export function DesktopPodcastPage() {
         }
 
         if (config.activeEngine === "qwen-asr" && !config.onlineASR.apiKey.trim()) {
-          setToast({ message: "请先在设置中填写千问 ASR API Key", type: "error" });
+          openSettings("transcription");
+          setToast({
+            message: "当前使用的是千问 ASR。已为你打开「转录」设置；请先填写 API Key，再重新点击转录。",
+            type: "error",
+            duration: 6000,
+          });
           return;
         }
 
         if (config.activeEngine === "local-whisper") {
-          const statusData = await helperRequest<{
-            success: boolean;
-            data: {
-              whisperInstalled: boolean;
-              modelInstalled: boolean;
-            };
-          }>("/whisper/status");
+          const runtimeStatus = await loadLocalRuntimeStatus();
+          if (!runtimeStatus) {
+            return;
+          }
 
-          if (statusData.success) {
-            const { whisperInstalled, modelInstalled } = statusData.data;
+          const blockingRequirements = runtimeStatus.missingRequirements.filter(
+            (item) => item === "homebrew" || item === "whisper" || item === "ffmpeg" || item === "model",
+          );
 
-            if (!whisperInstalled && !modelInstalled) {
-              setToast({
-                message: "请点击左侧导航栏中的「设置」安装 whisper.cpp 并下载模型",
-                type: "error",
-              });
-              return;
-            }
-
-            if (!whisperInstalled) {
-              setToast({ message: "请点击左侧导航栏中的「设置」安装 whisper.cpp", type: "error" });
-              return;
-            }
-
-            if (!modelInstalled) {
-              setToast({ message: "请点击左侧导航栏中的「设置」下载语音识别模型", type: "error" });
-              return;
-            }
+          if (blockingRequirements.length) {
+            openSettings("whisper");
+            setToast({
+              message: buildLocalRuntimeGuidance(runtimeStatus),
+              type: "error",
+              duration: 7000,
+            });
+            return;
           }
         }
 
@@ -417,7 +478,16 @@ export function DesktopPodcastPage() {
         setTaskId(null);
       }
     },
-    [closeEventSource, config.activeEngine, config.onlineASR, connectToTranscribeProgress, isLoading, podcastUrl],
+    [
+      closeEventSource,
+      config.activeEngine,
+      buildLocalRuntimeGuidance,
+      config.onlineASR,
+      connectToTranscribeProgress,
+      isLoading,
+      loadLocalRuntimeStatus,
+      podcastUrl,
+    ],
   );
 
   const handleRecordDeleted = useCallback(
@@ -484,7 +554,12 @@ export function DesktopPodcastPage() {
         </div>
 
         {toast && (
-          <ToastManager message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+          <ToastManager
+            message={toast.message}
+            type={toast.type}
+            duration={toast.duration}
+            onClose={() => setToast(null)}
+          />
         )}
 
         <Card className="relative z-[1]">
@@ -523,7 +598,7 @@ export function DesktopPodcastPage() {
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  输入小宇宙播客链接，自动提取音频并转录为文字
+                  输入小宇宙播客链接，自动提取音频并转录为文字。本地 Whisper 的安装、模型下载和路径配置都在「设置 → Whisper 设置」里完成。
                 </p>
               </div>
             </form>

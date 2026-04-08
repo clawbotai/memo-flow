@@ -50,16 +50,18 @@ export function Toast({ message, type = 'info', duration = 3000, onClose }: Toas
 interface ToastManagerProps {
   message: string | null;
   type?: 'success' | 'error' | 'info';
+  duration?: number;
   onClose: () => void;
 }
 
-export function ToastManager({ message, type = 'info', onClose }: ToastManagerProps) {
+export function ToastManager({ message, type = 'info', duration, onClose }: ToastManagerProps) {
   if (!message) return null;
 
   return (
     <Toast
       message={message}
       type={type}
+      duration={duration}
       onClose={onClose}
     />
   );

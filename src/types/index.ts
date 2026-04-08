@@ -15,9 +15,19 @@ export interface WhisperConfig {
 
 export interface WhisperStatus {
   helperConnected: boolean;
+  homebrewInstalled: boolean;
   whisperInstalled: boolean;
   modelInstalled: boolean;
   ffmpegInstalled: boolean;
+  autoInstallSupported: boolean;
+  homebrewPath?: string;
+  configuredWhisperPath?: string;
+  configuredFfmpegPath?: string;
+  effectiveWhisperPath?: string;
+  effectiveFfmpegPath?: string;
+  whisperSource: RuntimeExecutableSource;
+  ffmpegSource: RuntimeExecutableSource;
+  missingRequirements: LocalRuntimeRequirement[];
   whisperPath: string;
   modelPath: string;
   modelName: string;
@@ -65,6 +75,29 @@ export interface OnlineASRConfig {
 export interface BrowserTranscriptionConfig {
   activeEngine: TranscriptionEngineType;
   onlineASR: OnlineASRConfig;
+}
+
+export type RuntimeExecutableSource = 'configured' | 'detected' | 'missing';
+
+export type LocalRuntimeRequirement = 'homebrew' | 'whisper' | 'ffmpeg' | 'model';
+
+export type LocalRuntimeInstallableComponent = Exclude<LocalRuntimeRequirement, 'model'>;
+
+export type LocalRuntimeInstallStep =
+  | 'installing_homebrew'
+  | 'installing_whisper'
+  | 'installing_ffmpeg';
+
+export interface LocalRuntimeInstallRequest {
+  components: LocalRuntimeInstallableComponent[];
+}
+
+export interface LocalRuntimeInstallProgress {
+  status: 'idle' | 'running' | 'succeeded' | 'failed';
+  currentStep?: LocalRuntimeInstallStep;
+  message: string;
+  progress: number;
+  logsTail: string[];
 }
 
 /** 兼容旧调用方，保留该类型名 */

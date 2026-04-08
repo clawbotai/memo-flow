@@ -29,20 +29,33 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { WhisperConfig, WhisperStatus, TranscriptionEngineType } from "@/types";
+import {
+  LocalRuntimeInstallProgress,
+  LocalRuntimeInstallableComponent,
+  WhisperConfig,
+  WhisperStatus,
+  TranscriptionEngineType,
+} from "@/types";
 import { useTranscriptionConfig } from "@/hooks/use-transcription-config";
 import {
   createHelperEventSource,
   helperRequest,
   isHelperUnavailableError,
 } from "@/lib/local-helper-client";
+import { emitLocalRuntimeStatusChanged } from "@/lib/local-runtime-events";
+import {
+  normalizeWhisperStatus,
+  type NormalizedWhisperStatus,
+} from "@/lib/whisper-status";
 
 interface WhisperSettingsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialSection?: SettingsSection;
 }
 
 type SettingsSection = "general" | "transcription" | "whisper";
+export type { SettingsSection };
 
 interface DownloadProgress {
   status: "idle" | "downloading" | "completed" | "error";
@@ -114,6 +127,41 @@ const THEME_OPTIONS = [
     icon: Moon,
   },
 ];
+
+const MANUAL_INSTALL_COMMANDS = [
+  '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+  "brew install whisper-cpp",
+  "brew install ffmpeg",
+].join("\n");
+
+const REQUIREMENT_LABELS: Record<string, string> = {
+  homebrew: "Homebrew",
+  whisper: "whisper.cpp",
+  ffmpeg: "ffmpeg",
+  model: "模型文件",
+};
+
+function getExecutableSourceLabel(source: WhisperStatus["whisperSource"]): string {
+  switch (source) {
+    case "configured":
+      return "已使用用户手动配置";
+    case "detected":
+      return "已使用用户本机安装";
+    default:
+      return "缺失";
+  }
+}
+
+function getInstallComponents(
+  status: NormalizedWhisperStatus | null,
+): LocalRuntimeInstallableComponent[] {
+  if (!status) {
+    return [];
+  }
+
+  const ordered: LocalRuntimeInstallableComponent[] = ["homebrew", "whisper", "ffmpeg"];
+  return ordered.filter((component) => status.missingRequirements?.includes(component));
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -217,7 +265,7 @@ function WhisperPanel({
   onClose: () => void;
 }) {
   const [helperConnected, setHelperConnected] = React.useState(false);
-  const [status, setStatus] = React.useState<WhisperStatus | null>(null);
+  const [status, setStatus] = React.useState<NormalizedWhisperStatus | null>(null);
   const [config, setConfig] = React.useState<WhisperConfig>({
     whisperPath: "",
     modelPath: "",
@@ -230,12 +278,17 @@ function WhisperPanel({
   const [selectedModel, setSelectedModel] = React.useState<"small" | "medium">("small");
   const [downloading, setDownloading] = React.useState(false);
   const [downloadProgress, setDownloadProgress] = React.useState<DownloadProgress | null>(null);
+  const [installProgress, setInstallProgress] = React.useState<LocalRuntimeInstallProgress | null>(
+    null,
+  );
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
+  const [showManualCommands, setShowManualCommands] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const downloadEsRef = React.useRef<EventSource | null>(null);
+  const installEsRef = React.useRef<EventSource | null>(null);
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
@@ -258,7 +311,8 @@ function WhisperPanel({
       }
 
       if (statusResult.success) {
-        setStatus(statusResult.data);
+        setStatus(normalizeWhisperStatus(statusResult.data));
+        emitLocalRuntimeStatusChanged();
       }
     } catch (err) {
       setHelperConnected(false);
@@ -283,8 +337,48 @@ function WhisperPanel({
   React.useEffect(() => {
     return () => {
       downloadEsRef.current?.close();
+      installEsRef.current?.close();
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!open) {
+      installEsRef.current?.close();
+      installEsRef.current = null;
+      return;
+    }
+
+    installEsRef.current?.close();
+    const es = createHelperEventSource("/local-runtime/install-progress");
+    installEsRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as LocalRuntimeInstallProgress;
+        setInstallProgress(data);
+
+        if (data.status === "succeeded" || data.status === "failed") {
+          loadData();
+        }
+      } catch (err) {
+        console.error("解析本地安装进度失败:", err);
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      if (installEsRef.current === es) {
+        installEsRef.current = null;
+      }
+    };
+
+    return () => {
+      es.close();
+      if (installEsRef.current === es) {
+        installEsRef.current = null;
+      }
+    };
+  }, [loadData, open]);
 
   const startDownloadTracking = React.useCallback(() => {
     downloadEsRef.current?.close();
@@ -343,6 +437,25 @@ function WhisperPanel({
     await handleDownloadModel();
   };
 
+  const handleInstallRuntime = async () => {
+    const components = getInstallComponents(status);
+    if (!components.length) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await helperRequest<{ success: boolean }>("/local-runtime/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ components }),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "启动本地依赖安装失败");
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError(null);
@@ -388,7 +501,9 @@ function WhisperPanel({
   };
 
   const modelExists = status?.modelName === selectedModel && status?.modelInstalled;
-  const isBusy = downloading || saving;
+  const installingRuntime = installProgress?.status === "running";
+  const installComponents = getInstallComponents(status);
+  const isBusy = downloading || saving || installingRuntime;
   const platformLabel = status?.platform === "win32" ? "Windows" : status?.platform === "darwin" ? "macOS" : status?.platform ?? "本机";
 
   const getDownloadButtonContent = () => {
@@ -416,6 +531,53 @@ function WhisperPanel({
     );
   };
 
+  const runtimeChecklist = status
+    ? [
+        {
+          id: "homebrew",
+          label: "Homebrew",
+          installed: status.homebrewInstalled,
+          detail: status.isLegacyPayload
+            ? "当前 helper 未返回 Homebrew 的精确检测信息；重启 helper 后会刷新。"
+            : status.homebrewInstalled
+              ? status.homebrewPath || "已检测到 Homebrew"
+              : "缺少 Homebrew，一键安装将先安装它",
+          stateLabel: status.isLegacyPayload
+            ? "旧版 helper"
+            : status.homebrewInstalled
+              ? "已检测到"
+              : "缺失",
+        },
+        {
+          id: "whisper",
+          label: "whisper.cpp",
+          installed: status.whisperInstalled,
+          detail: status.whisperInstalled
+            ? status.effectiveWhisperPath || status.whisperPath
+            : "未检测到可用的 whisper 可执行文件",
+          stateLabel: getExecutableSourceLabel(status.whisperSource),
+        },
+        {
+          id: "ffmpeg",
+          label: "ffmpeg",
+          installed: status.ffmpegInstalled,
+          detail: status.ffmpegInstalled
+            ? status.effectiveFfmpegPath || status.ffmpegPath
+            : "未检测到可用的 ffmpeg，可先用一键安装补齐",
+          stateLabel: getExecutableSourceLabel(status.ffmpegSource),
+        },
+        {
+          id: "model",
+          label: "模型文件",
+          installed: status.modelInstalled,
+          detail: status.modelInstalled
+            ? `${status.modelName} · ${status.modelSize}`
+            : "模型仍需单独下载，本页下方保留独立下载按钮",
+          stateLabel: status.modelInstalled ? "已下载" : "缺失",
+        },
+      ]
+    : [];
+
   return (
     <section
       aria-hidden={!visible}
@@ -441,7 +603,7 @@ function WhisperPanel({
           )}
 
           <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">本机 helper</span>
                 <div className="flex items-center gap-2">
@@ -460,7 +622,7 @@ function WhisperPanel({
               {!helperConnected && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    前端部署在 Vercel 后，浏览器无法直接访问你电脑的文件系统；需要先在用户电脑上启动本机 helper。
+                    需要先在当前电脑上启动本机 helper，设置页才能检测和安装本地转录依赖。
                   </p>
                   <div className="rounded-xl bg-muted/60 px-3 py-3 text-xs text-muted-foreground">
                     在用户电脑本机运行：<code>npm run helper</code>
@@ -468,61 +630,113 @@ function WhisperPanel({
                 </div>
               )}
 
-              <div className="border-t border-border/50 pt-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">whisper.cpp</span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "h-2.5 w-2.5 rounded-full",
-                        status?.whisperInstalled ? "bg-green-500" : "bg-red-500"
-                      )}
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {status?.whisperInstalled ? "路径可用" : "路径无效"}
-                    </span>
-                  </div>
+              <div className="space-y-3 border-t border-border/50 pt-4">
+                <div>
+                  <h4 className="text-sm font-medium">本地转录环境清单</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    本地转录优先复用你电脑上已有的组件。缺失时可一键安装 `Homebrew`、
+                    `whisper.cpp` 与 `ffmpeg`，模型仍单独下载。
+                  </p>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  v1 采用混合模式：Windows 和 macOS 都支持手动填写本机 whisper 路径。
-                </p>
-              </div>
 
-              <div className="border-t border-border/50 pt-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">ffmpeg</span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "h-2.5 w-2.5 rounded-full",
-                        status?.ffmpegInstalled ? "bg-green-500" : "bg-red-500"
-                      )}
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {status?.ffmpegInstalled ? "路径可用" : "路径无效"}
-                    </span>
-                  </div>
+                <div className="grid gap-3">
+                  {runtimeChecklist.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-start justify-between gap-4 rounded-2xl border border-border/60 bg-background/70 px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium">{item.label}</div>
+                        <div className="mt-1 break-all text-xs text-muted-foreground">{item.detail}</div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span
+                          className={cn(
+                            "h-2.5 w-2.5 rounded-full",
+                            item.installed ? "bg-green-500" : "bg-red-500"
+                          )}
+                        />
+                        <span className="text-xs text-muted-foreground">{item.stateLabel}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  本地 Whisper 转录需要 ffmpeg 完成音频格式转换。
-                </p>
-              </div>
 
-              <div className="border-t border-border/50 pt-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">模型文件</span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "h-2.5 w-2.5 rounded-full",
-                        status?.modelInstalled ? "bg-green-500" : "bg-red-500"
-                      )}
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {status?.modelInstalled ? `已存在 (${status.modelSize})` : "未下载"}
-                    </span>
+                {status?.isLegacyPayload && (
+                  <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                    <p className="text-sm font-medium">检测信息来自旧版 helper</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      当前 helper 仍使用旧状态结构，Whisper / ffmpeg 是否可用会继续按实际结果判断；
+                      如果想看到更完整的 Homebrew 与来源信息，重启 helper 后再打开此页面即可。
+                    </p>
                   </div>
-                </div>
+                )}
+
+                {!!status?.missingRequirements?.length && (
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                    <p className="text-sm font-medium text-foreground">当前本地转录环境未完成</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      缺失项：
+                      {status.missingRequirements
+                        .map((item) => REQUIREMENT_LABELS[item] || item)
+                        .join("、")}
+                      。补齐后即可使用本地 Whisper 转录。
+                    </p>
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                      <Button
+                        type="button"
+                        onClick={handleInstallRuntime}
+                        disabled={!helperConnected || !status.autoInstallSupported || !installComponents.length || installingRuntime}
+                      >
+                        {installingRuntime ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            正在安装组件...
+                          </>
+                        ) : (
+                          "一键安装所需组件"
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowManualCommands((prev) => !prev)}
+                      >
+                        {showManualCommands ? "隐藏手动安装命令" : "查看手动安装命令"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {showManualCommands && (
+                  <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                    <p className="text-sm font-medium">手动安装命令</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      如果一键安装失败，可在系统终端依次运行以下命令。
+                    </p>
+                    <pre className="mt-3 overflow-x-auto rounded-xl bg-card px-3 py-3 text-xs text-muted-foreground">
+                      <code>{MANUAL_INSTALL_COMMANDS}</code>
+                    </pre>
+                  </div>
+                )}
+
+                {installProgress && installProgress.status !== "idle" && (
+                  <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">一键安装进度</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{installProgress.message}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{installProgress.progress}%</span>
+                    </div>
+                    <Progress value={installProgress.progress} max={100} className="mt-3" />
+                    {!!installProgress.logsTail.length && (
+                      <pre className="mt-3 max-h-48 overflow-y-auto rounded-xl bg-card px-3 py-3 text-xs text-muted-foreground">
+                        <code>{installProgress.logsTail.join("\n")}</code>
+                      </pre>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -953,14 +1167,14 @@ function TranscriptionEnginePanel({ visible }: { visible: boolean }) {
   );
 }
 
-export function WhisperSettings({ open, onOpenChange }: WhisperSettingsProps) {
+export function WhisperSettings({ open, onOpenChange, initialSection = "general" }: WhisperSettingsProps) {
   const [activeSection, setActiveSection] = React.useState<SettingsSection>("general");
 
   React.useEffect(() => {
     if (open) {
-      setActiveSection("general");
+      setActiveSection(initialSection);
     }
-  }, [open]);
+  }, [initialSection, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

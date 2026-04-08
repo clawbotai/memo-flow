@@ -3,13 +3,23 @@
 import { Outlet } from "react-router-dom";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { WhisperSettings } from "@/components/whisper-settings";
+import { WhisperSettings, type SettingsSection } from "@/components/whisper-settings";
 import { DesktopSidebar } from "@desktop/components/DesktopSidebar";
 import { DesktopTopBar } from "@desktop/components/DesktopTopBar";
+
+export interface DesktopShellContext {
+  openSettings: (section?: SettingsSection) => void;
+}
 
 export function DesktopAppShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+
+  const openSettings = (section: SettingsSection = "general") => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
+  };
 
   return (
     <>
@@ -20,7 +30,7 @@ export function DesktopAppShell() {
         />
         <DesktopSidebar
           open={sidebarOpen}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => openSettings("general")}
         />
         <main
           className={cn(
@@ -28,10 +38,14 @@ export function DesktopAppShell() {
             sidebarOpen ? "md:ml-60" : "md:ml-0",
           )}
         >
-          <Outlet />
+          <Outlet context={{ openSettings } satisfies DesktopShellContext} />
         </main>
       </div>
-      <WhisperSettings open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <WhisperSettings
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        initialSection={settingsSection}
+      />
     </>
   );
 }
