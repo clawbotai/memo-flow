@@ -27,6 +27,16 @@ export class HelperUnavailableError extends Error {
   }
 }
 
+export class HelperRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'HelperRequestError';
+    this.status = status;
+  }
+}
+
 function buildHelperUrl(path: string): string {
   const origin = resolveHelperOrigin();
   return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
@@ -53,7 +63,7 @@ export async function helperRequest<T>(path: string, init?: RequestInit): Promis
       payload && typeof payload === 'object' && 'error' in payload
         ? String(payload.error)
         : `请求失败 (${response.status})`;
-    throw new Error(message);
+    throw new HelperRequestError(message, response.status);
   }
 
   return payload as T;
@@ -65,6 +75,10 @@ export function createHelperEventSource(path: string): EventSource {
 
 export function isHelperUnavailableError(error: unknown): boolean {
   return error instanceof HelperUnavailableError;
+}
+
+export function isHelperRequestError(error: unknown): boolean {
+  return error instanceof HelperRequestError;
 }
 
 export function getHelperUrl(path: string): string {

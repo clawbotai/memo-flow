@@ -318,6 +318,11 @@ export default function PodcastPage() {
         return;
       }
 
+      if (config.activeEngine === 'qwen-asr' && !config.onlineASR.apiKey.trim()) {
+        setToast({ message: '请先在设置中填写千问 ASR API Key', type: 'error' });
+        return;
+      }
+
       // 如果使用本地 Whisper 引擎，检查安装状态
       if (config.activeEngine === 'local-whisper') {
         const statusData = await helperRequest<{
@@ -393,14 +398,23 @@ export default function PodcastPage() {
       console.error('Podcast transcription error:', error);
       if (isHelperUnavailableError(error)) {
         setToast({ message: '未检测到本机 helper 服务，请先在电脑上启动 MemoFlow helper', type: 'error' });
+        transcribeFinishedRef.current = true;
+        activeTaskIdRef.current = null;
+        closeEventSource();
+        setTaskId(null);
+        return;
+      }
+      if (error instanceof Error) {
+        setToast({ message: error.message, type: 'error' });
+      } else {
+        setToast({ message: '网络错误，请检查连接', type: 'error' });
       }
       transcribeFinishedRef.current = true;
       activeTaskIdRef.current = null;
       closeEventSource();
       setTaskId(null);
-      setToast({ message: '网络错误，请检查连接', type: 'error' });
     }
-  }, [closeEventSource, connectToTranscribeProgress, isLoading, podcastUrl]);
+  }, [closeEventSource, config.activeEngine, config.onlineASR, connectToTranscribeProgress, isLoading, podcastUrl]);
 
   const handleRecordDeleted = useCallback((recordId: string) => {
     setTranscriptionHistory(removeCachedTranscriptionRecord(recordId));

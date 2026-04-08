@@ -315,6 +315,11 @@ export function DesktopPodcastPage() {
           return;
         }
 
+        if (config.activeEngine === "qwen-asr" && !config.onlineASR.apiKey.trim()) {
+          setToast({ message: "请先在设置中填写千问 ASR API Key", type: "error" });
+          return;
+        }
+
         if (config.activeEngine === "local-whisper") {
           const statusData = await helperRequest<{
             success: boolean;
@@ -395,12 +400,21 @@ export function DesktopPodcastPage() {
             message: "未检测到本机 helper 服务，请先在电脑上启动 MemoFlow helper",
             type: "error",
           });
+          transcribeFinishedRef.current = true;
+          activeTaskIdRef.current = null;
+          closeEventSource();
+          setTaskId(null);
+          return;
+        }
+        if (error instanceof Error) {
+          setToast({ message: error.message, type: "error" });
+        } else {
+          setToast({ message: "网络错误，请检查连接", type: "error" });
         }
         transcribeFinishedRef.current = true;
         activeTaskIdRef.current = null;
         closeEventSource();
         setTaskId(null);
-        setToast({ message: "网络错误，请检查连接", type: "error" });
       }
     },
     [closeEventSource, config.activeEngine, config.onlineASR, connectToTranscribeProgress, isLoading, podcastUrl],

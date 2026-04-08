@@ -1970,6 +1970,18 @@ function parsePathname(req) {
   return new URL(req.url, `http://${req.headers.host}`).pathname;
 }
 
+function validateOnlineAsrRequest(engine, onlineASRConfig) {
+  if (engine !== 'qwen-asr') {
+    return null;
+  }
+
+  if (!String(onlineASRConfig?.apiKey || '').trim()) {
+    return '千问 ASR API Key 未配置，请在设置中填写';
+  }
+
+  return null;
+}
+
 async function handleOptions(res) {
   res.writeHead(204, {
     'Access-Control-Allow-Origin': '*',
@@ -2077,8 +2089,14 @@ async function handleRequest(req, res) {
         sendJson(res, 400, { success: false, error: 'URL is required' });
         return;
       }
+      const engine = body.engine || 'local-whisper';
+      const onlineAsrError = validateOnlineAsrRequest(engine, body.onlineASRConfig);
+      if (onlineAsrError) {
+        sendJson(res, 400, { success: false, error: onlineAsrError });
+        return;
+      }
       const taskId = `${Date.now()}_${randomUUID().slice(0, 8)}`;
-      runNewTranscription(taskId, body.url, body.engine || 'local-whisper', body.onlineASRConfig).catch(
+      runNewTranscription(taskId, body.url, engine, body.onlineASRConfig).catch(
         () => {},
       );
       sendJson(res, 200, { success: true, data: { taskId } });
@@ -2145,7 +2163,13 @@ async function handleRequest(req, res) {
         sendJson(res, 404, { success: false, error: '转录记录不存在' });
         return;
       }
-      runRetranscription(taskId, body.engine || 'local-whisper', body.onlineASRConfig).catch(() => {});
+      const engine = body.engine || 'local-whisper';
+      const onlineAsrError = validateOnlineAsrRequest(engine, body.onlineASRConfig);
+      if (onlineAsrError) {
+        sendJson(res, 400, { success: false, error: onlineAsrError });
+        return;
+      }
+      runRetranscription(taskId, engine, body.onlineASRConfig).catch(() => {});
       sendJson(res, 200, { success: true, data: { taskId } });
       return;
     }
