@@ -10,7 +10,7 @@ export function PageScene({
   containerClassName = "max-w-5xl",
 }: PageSceneProps) {
   return (
-    <div className="relative min-h-full overflow-hidden bg-background">
+    <div className="relative min-h-full bg-background">
       <div className="pointer-events-none absolute inset-0 opacity-20">
         <div className="absolute left-10 top-10 h-32 w-32 rotate-12 rounded-full bg-primary/10 blur-xl" />
         <div className="absolute right-20 top-40 h-24 w-24 -rotate-45 rounded-full bg-secondary/15 blur-lg" />

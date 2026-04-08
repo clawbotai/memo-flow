@@ -23,7 +23,7 @@ export function DesktopAppShell() {
 
   return (
     <>
-      <div className="flex h-screen bg-background">
+      <div className="flex h-screen overflow-hidden bg-background">
         <DesktopTopBar
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
@@ -34,7 +34,7 @@ export function DesktopAppShell() {
         />
         <main
           className={cn(
-            "flex-1 overflow-auto pt-11 transition-[margin] duration-300 ease-out",
+            "flex-1 overflow-auto overscroll-none pt-11 transition-[margin] duration-300 ease-out",
             sidebarOpen ? "md:ml-60" : "md:ml-0",
           )}
         >

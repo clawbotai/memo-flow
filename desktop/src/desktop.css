@@ -2,9 +2,12 @@ html,
 body,
 #root {
   height: 100%;
+  overflow: hidden;
 }
 
 body {
   margin: 0;
   font-family: "Lora", ui-serif, Georgia, serif;
+  /* Prevent macOS rubber-band / elastic overscroll on the body */
+  overscroll-behavior: none;
 }
