@@ -19,6 +19,7 @@ import {
 type PageId = "home" | "podcast" | "analyze" | "knowledge" | "history";
 
 interface DesktopSidebarProps {
+  open: boolean;
   onOpenSettings: () => void;
 }
 
@@ -49,7 +50,7 @@ function getActivePage(pathname: string): PageId {
   return "home";
 }
 
-export function DesktopSidebar({ onOpenSettings }: DesktopSidebarProps) {
+export function DesktopSidebar({ open, onOpenSettings }: DesktopSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -77,10 +78,11 @@ export function DesktopSidebar({ onOpenSettings }: DesktopSidebarProps) {
 
   const sidebarContent = (
     <>
-      <div className="p-6">
+      <div className="px-6 pb-4 pt-5">
         <h1 className="bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-xl font-semibold text-transparent">
           Linksy
         </h1>
+        <p className="mt-1 text-xs text-muted-foreground">Audio into reusable knowledge</p>
       </div>
 
       <div className="flex-1 px-3 py-2">
@@ -116,8 +118,8 @@ export function DesktopSidebar({ onOpenSettings }: DesktopSidebarProps) {
         </nav>
       </div>
 
-      <div className="mt-auto border-t px-3 py-4">
-        <nav className="space-y-1">
+      <div className="mt-auto px-3 pb-4 pt-2">
+        <nav className="space-y-1 rounded-2xl bg-background/55 p-2">
           <button
             type="button"
             onClick={() => {
@@ -152,7 +154,13 @@ export function DesktopSidebar({ onOpenSettings }: DesktopSidebarProps) {
         <Menu className="w-5 h-5" />
       </button>
 
-      <aside className="fixed left-0 top-0 hidden h-screen w-60 flex-col border-r bg-background md:flex">
+      <aside
+        className={cn(
+          "fixed left-0 top-0 hidden h-screen w-60 flex-col bg-card/92 pt-11 backdrop-blur-xl transition-transform duration-300 ease-out md:flex",
+          open ? "translate-x-0" : "-translate-x-full pointer-events-none",
+        )}
+        aria-hidden={!open}
+      >
         {sidebarContent}
       </aside>
 
@@ -162,7 +170,7 @@ export function DesktopSidebar({ onOpenSettings }: DesktopSidebarProps) {
             className="fixed inset-0 z-40 bg-black/50 md:hidden"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="fixed left-0 top-0 z-50 flex h-screen w-60 flex-col border-r bg-background md:hidden">
+          <aside className="fixed left-0 top-0 z-50 flex h-screen w-60 flex-col bg-card/95 backdrop-blur-xl md:hidden">
             <div className="flex items-center justify-end p-4">
               <button
                 type="button"

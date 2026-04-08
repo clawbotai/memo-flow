@@ -14,6 +14,12 @@
       {
         "label": "main",
         "title": "Linksy",
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": {
+          "x": 14,
+          "y": 19
+        },
         "width": 1280,
         "height": 800,
         "minWidth": 1100,

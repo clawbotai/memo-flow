@@ -69,10 +69,11 @@ export function Sidebar({ activePage, onNavigate, onOpenSettings }: SidebarProps
   const sidebarContent = (
     <>
       {/* Logo 区域 */}
-      <div className="p-6">
+      <div className="px-6 pb-4 pt-5">
         <h1 className="font-semibold text-xl bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
           Linksy
         </h1>
+        <p className="mt-1 text-xs text-muted-foreground">Audio into reusable knowledge</p>
       </div>
 
       {/* 主菜单区域 */}
@@ -109,8 +110,8 @@ export function Sidebar({ activePage, onNavigate, onOpenSettings }: SidebarProps
       </div>
 
       {/* 底部菜单区域 */}
-      <div className="mt-auto px-3 py-4 border-t">
-        <nav className="space-y-1">
+      <div className="mt-auto px-3 pb-4 pt-2">
+        <nav className="space-y-1 rounded-2xl bg-background/55 p-2">
           {bottomMenuItems.map((item) => (
             <button
               key={item.id}
@@ -144,7 +145,7 @@ export function Sidebar({ activePage, onNavigate, onOpenSettings }: SidebarProps
       </button>
 
       {/* 桌面端侧边栏 */}
-      <aside className="hidden md:flex w-60 h-screen flex-col border-r bg-background fixed left-0 top-0">
+      <aside className="fixed left-0 top-0 hidden h-screen w-60 flex-col bg-card/80 backdrop-blur-xl md:flex">
         {sidebarContent}
       </aside>
 
@@ -157,7 +158,7 @@ export function Sidebar({ activePage, onNavigate, onOpenSettings }: SidebarProps
             onClick={() => setMobileOpen(false)}
           />
           {/* 侧边栏 */}
-          <aside className="fixed left-0 top-0 w-60 h-screen flex-col border-r bg-background z-50 md:hidden animate-in slide-in-from-left">
+          <aside className="fixed left-0 top-0 z-50 h-screen w-60 flex-col bg-card/95 backdrop-blur-xl md:hidden animate-in slide-in-from-left">
             <div className="flex items-center justify-between p-6">
               <h1 className="font-semibold text-xl bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
                 Linksy
@@ -201,8 +202,8 @@ export function Sidebar({ activePage, onNavigate, onOpenSettings }: SidebarProps
                 })}
               </nav>
             </div>
-            <div className="mt-auto px-3 py-4 border-t">
-              <nav className="space-y-1">
+            <div className="mt-auto px-3 pb-4 pt-2">
+              <nav className="space-y-1 rounded-2xl bg-background/55 p-2">
                 {bottomMenuItems.map((item) => (
                   <button
                     key={item.id}
