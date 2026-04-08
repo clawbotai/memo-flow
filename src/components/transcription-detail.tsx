@@ -288,9 +288,9 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
   }, [segments.length, liveRecord.transcript, scrollToBottom]);
 
   return (
-    <div className="flex flex-col md:flex-row h-full gap-6 min-h-0">
+    <div className="flex h-full min-h-0 flex-col gap-6 md:flex-row">
       {/* ── 左侧：音源信息 ── */}
-      <div className="w-full md:w-[360px] shrink-0 flex flex-col gap-4">
+      <div className="flex w-full shrink-0 flex-col gap-4 md:h-full md:w-[360px]">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center justify-between text-base">
@@ -419,7 +419,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
 
       {/* ── 右侧：逐字稿 ── */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <Card className="flex flex-col h-[520px] md:h-[640px]">
+        <Card className="flex min-h-[420px] flex-1 flex-col md:min-h-0">
           <CardHeader className="pb-3 shrink-0">
             <CardTitle className="flex items-center justify-between text-base">
               <span>转录逐字稿</span>

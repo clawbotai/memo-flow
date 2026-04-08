@@ -1,13 +1,16 @@
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 interface PageSceneProps {
   children: ReactNode;
   containerClassName?: string;
+  contentClassName?: string;
 }
 
 export function PageScene({
   children,
   containerClassName = "max-w-5xl",
+  contentClassName,
 }: PageSceneProps) {
   return (
     <div className="relative min-h-full bg-background">
@@ -37,7 +40,15 @@ export function PageScene({
         </svg>
       </div>
 
-      <div className={`${containerClassName} relative z-10 mx-auto px-6 py-8`}>{children}</div>
+      <div
+        className={cn(
+          "relative z-10 mx-auto w-full px-6 py-8",
+          containerClassName,
+          contentClassName,
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }

@@ -49,15 +49,18 @@ export function DesktopTranscriptionDetailPage() {
   }, [id]);
 
   return (
-    <PageScene containerClassName="max-w-7xl">
-      <div className="space-y-6">
-        <Card>
+    <PageScene
+      containerClassName="max-w-none"
+      contentClassName="h-[calc(100vh-44px)] max-h-[calc(100vh-44px)] overflow-hidden px-5 py-5"
+    >
+      <div className="h-full min-h-0">
+        <Card className="flex h-full min-h-0 flex-col overflow-hidden">
           <CardHeader>
             <CardTitle>{record?.title ?? "转录任务信息"}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {loading ? (
-              <div className="flex h-64 items-center justify-center">
+              <div className="flex min-h-[320px] flex-1 items-center justify-center">
                 <div className="text-center">
                   <FlowLoader size="md" />
                   <p className="mt-2 text-muted-foreground">正在加载转录详情...</p>
@@ -66,7 +69,7 @@ export function DesktopTranscriptionDetailPage() {
             ) : record ? (
               <TranscriptionDetail record={record} />
             ) : (
-              <div className="flex h-64 items-center justify-center">
+              <div className="flex min-h-[320px] flex-1 items-center justify-center">
                 <div className="text-center">
                   <h2 className="mb-2 text-xl font-semibold">转录记录不存在</h2>
                   <p className="text-muted-foreground">

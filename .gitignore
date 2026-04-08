@@ -45,3 +45,5 @@ whisper.cpp/
 models/
 transcripts/
 .whisper-config.json
+
+.claude

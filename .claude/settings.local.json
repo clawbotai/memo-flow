@@ -5,7 +5,8 @@
       "WebSearch",
       "Bash(npx next:*)",
       "Bash(npx tsc:*)",
-      "Bash(gh pr:*)"
+      "Bash(gh pr:*)",
+      "Bash(ls -la /Users/mondoi/Documents/tinyidea/projects/memo-flow/src/app/transcriptions/[id]/)"
     ]
   }
 }
