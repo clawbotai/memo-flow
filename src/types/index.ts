@@ -4,6 +4,28 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
+export type LanguageModelProvider = 'openai' | 'claude' | 'gemini' | 'qwen' | 'zhipu';
+
+export interface LanguageModelProviderConfig {
+  apiKey: string;
+  apiKeyConfigured?: boolean;
+  model: string;
+  baseUrl: string;
+  temperature: number;
+  maxTokens: number;
+  enabled: boolean;
+}
+
+export interface LanguageModelSettings {
+  providers: Record<LanguageModelProvider, LanguageModelProviderConfig>;
+}
+
+export interface LanguageModelTestResult {
+  success: boolean;
+  message: string;
+  provider: LanguageModelProvider;
+}
+
 export interface WhisperConfig {
   whisperPath: string;
   modelPath: string;

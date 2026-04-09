@@ -3,7 +3,7 @@
 import { Outlet } from "react-router-dom";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { WhisperSettings, type SettingsSection } from "@/components/whisper-settings";
+import { AppSettingsDialog, type SettingsSection } from "@/components/whisper-settings";
 import { DesktopSidebar } from "@desktop/components/DesktopSidebar";
 import { DesktopTopBar } from "@desktop/components/DesktopTopBar";
 
@@ -41,7 +41,7 @@ export function DesktopAppShell() {
           <Outlet context={{ openSettings } satisfies DesktopShellContext} />
         </main>
       </div>
-      <WhisperSettings
+      <AppSettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         initialSection={settingsSection}

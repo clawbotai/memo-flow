@@ -33,6 +33,15 @@ const TRANSCRIPTION_PROGRESS_START = 25;
 const TRANSCRIPTION_PROGRESS_END = 95;
 const DEFAULT_QWEN_BASE_URL = 'https://dashscope.aliyuncs.com/api/v1';
 const DEFAULT_QWEN_TEST_MODEL = 'qwen-plus';
+const LANGUAGE_MODEL_PROVIDERS = ['openai', 'claude', 'gemini', 'qwen', 'zhipu'];
+const LLM_TEST_TIMEOUT_MS = 20000;
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:1420',
+  'http://127.0.0.1:1420',
+  'tauri://localhost',
+  'https://tauri.localhost',
+  'http://tauri.localhost',
+];
 const HOMEBREW_INSTALL_COMMAND =
   '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
 
@@ -57,6 +66,7 @@ const APP_DIR = getAppDataDir();
 const MODELS_DIR = path.join(APP_DIR, 'models');
 const HISTORY_FILE = path.join(APP_DIR, 'transcription-history.json');
 const CONFIG_FILE = path.join(APP_DIR, 'whisper-config.json');
+const LANGUAGE_MODEL_CONFIG_FILE = path.join(APP_DIR, 'language-model-config.json');
 const TEMP_DIR = path.join(os.tmpdir(), 'memo-flow-helper');
 const PLAIN_TRANSCRIPT_FILE = '纯文本.txt';
 const TIMESTAMPED_TRANSCRIPT_FILE = '逐字稿.txt';
@@ -85,16 +95,58 @@ let serverInstance = null;
 let startPromise = null;
 let localRuntimeInstallPromise = null;
 
+function parseAllowedOrigins() {
+  const configured = String(process.env.MEMOFLOW_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return new Set(configured.length ? configured : DEFAULT_ALLOWED_ORIGINS);
+}
+
+const ALLOWED_ORIGINS = parseAllowedOrigins();
+
+function getRequestOrigin(req) {
+  const origin = req.headers.origin;
+  return typeof origin === 'string' ? origin : '';
+}
+
+function isAllowedOrigin(origin) {
+  return !!origin && ALLOWED_ORIGINS.has(origin);
+}
+
+function buildCorsHeaders(req) {
+  const origin = getRequestOrigin(req);
+  if (!isAllowedOrigin(origin)) {
+    return {};
+  }
+
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Private-Network': 'true',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    Vary: 'Origin',
+  };
+}
+
+function assertTrustedOrigin(req) {
+  const origin = getRequestOrigin(req);
+  if (!origin || isAllowedOrigin(origin)) {
+    return;
+  }
+
+  const error = new Error('不受信任的请求来源');
+  error.statusCode = 403;
+  throw error;
+}
+
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload);
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(body),
     'Cache-Control': 'no-cache',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Private-Network': 'true',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    ...(res.__memoFlowCorsHeaders || {}),
   });
   res.end(body);
 }
@@ -117,10 +169,7 @@ function openSse(res) {
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache, no-transform',
     Connection: 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Private-Network': 'true',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    ...(res.__memoFlowCorsHeaders || {}),
   });
   res.write('retry: 3000\n');
   res.write(': connected\n\n');
@@ -507,6 +556,201 @@ async function saveConfig(config) {
   const normalized = normalizeConfig(config);
   await fsp.writeFile(CONFIG_FILE, JSON.stringify(normalized, null, 2), 'utf8');
   return normalized;
+}
+
+function normalizeProviderString(input, fallback) {
+  const value = String(input || '').trim();
+  return value || fallback;
+}
+
+function normalizeProviderNumber(input, fallback, min, max) {
+  const parsed = Number(input);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function normalizeProviderBoolean(input, fallback = false) {
+  if (typeof input === 'boolean') {
+    return input;
+  }
+  if (input === 'true') return true;
+  if (input === 'false') return false;
+  return fallback;
+}
+
+function getDefaultLanguageModelSettings() {
+  return {
+    providers: {
+      openai: {
+        apiKey: '',
+        model: 'gpt-4.1-mini',
+        baseUrl: 'https://api.openai.com/v1',
+        temperature: 0.7,
+        maxTokens: 4096,
+        enabled: false,
+      },
+      claude: {
+        apiKey: '',
+        model: 'claude-sonnet-4-5',
+        baseUrl: 'https://api.anthropic.com/v1',
+        temperature: 0.7,
+        maxTokens: 4096,
+        enabled: false,
+      },
+      gemini: {
+        apiKey: '',
+        model: 'gemini-2.5-flash',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        temperature: 0.7,
+        maxTokens: 4096,
+        enabled: false,
+      },
+      qwen: {
+        apiKey: '',
+        model: 'qwen-plus',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        temperature: 0.7,
+        maxTokens: 4096,
+        enabled: false,
+      },
+      zhipu: {
+        apiKey: '',
+        model: 'glm-4.5-flash',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        temperature: 0.7,
+        maxTokens: 4096,
+        enabled: false,
+      },
+    },
+  };
+}
+
+function normalizeLanguageModelProviderConfig(config, defaults) {
+  const next = {
+    ...defaults,
+    ...(config || {}),
+  };
+
+  return {
+    apiKey: normalizeProviderString(next.apiKey, defaults.apiKey),
+    model: normalizeProviderString(next.model, defaults.model),
+    baseUrl: normalizeProviderString(next.baseUrl, defaults.baseUrl).replace(/\/$/, ''),
+    temperature: normalizeProviderNumber(next.temperature, defaults.temperature, 0, 2),
+    maxTokens: Math.floor(
+      normalizeProviderNumber(next.maxTokens, defaults.maxTokens, 1, 128000),
+    ),
+    enabled: normalizeProviderBoolean(next.enabled, defaults.enabled),
+  };
+}
+
+function sanitizeLanguageModelProviderConfig(config) {
+  return {
+    ...config,
+    apiKey: '',
+    apiKeyConfigured: Boolean(String(config?.apiKey || '').trim()),
+  };
+}
+
+function normalizeLanguageModelSettings(settings) {
+  const defaults = getDefaultLanguageModelSettings();
+  const sourceProviders = settings?.providers || {};
+  const providers = {};
+
+  for (const provider of LANGUAGE_MODEL_PROVIDERS) {
+    providers[provider] = normalizeLanguageModelProviderConfig(
+      sourceProviders[provider],
+      defaults.providers[provider],
+    );
+  }
+
+  return { providers };
+}
+
+function sanitizeLanguageModelSettings(settings) {
+  const providers = {};
+
+  for (const provider of LANGUAGE_MODEL_PROVIDERS) {
+    providers[provider] = sanitizeLanguageModelProviderConfig(settings.providers[provider]);
+  }
+
+  return { providers };
+}
+
+async function loadLanguageModelSettings() {
+  await ensureAppDirs();
+  const defaults = getDefaultLanguageModelSettings();
+
+  try {
+    const raw = await fsp.readFile(LANGUAGE_MODEL_CONFIG_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return normalizeLanguageModelSettings({
+      ...defaults,
+      ...parsed,
+      providers: {
+        ...defaults.providers,
+        ...(parsed?.providers || {}),
+      },
+    });
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      await saveLanguageModelSettings(defaults);
+      return defaults;
+    }
+    throw error;
+  }
+}
+
+async function saveLanguageModelSettings(settings) {
+  await ensureAppDirs();
+  const normalized = normalizeLanguageModelSettings(settings);
+  await fsp.writeFile(
+    LANGUAGE_MODEL_CONFIG_FILE,
+    JSON.stringify(normalized, null, 2),
+    'utf8',
+  );
+  return normalized;
+}
+
+function mergeLanguageModelProviderConfig(current, patch, defaults) {
+  const next = {
+    ...current,
+    ...(patch || {}),
+  };
+  const rawApiKey = typeof patch?.apiKey === 'string' ? patch.apiKey.trim() : '';
+  const shouldClearApiKey =
+    patch &&
+    Object.prototype.hasOwnProperty.call(patch, 'apiKeyConfigured') &&
+    patch.apiKeyConfigured === false &&
+    !rawApiKey;
+
+  if (rawApiKey) {
+    next.apiKey = rawApiKey;
+  } else if (shouldClearApiKey) {
+    next.apiKey = '';
+  } else {
+    next.apiKey = current.apiKey;
+  }
+
+  delete next.apiKeyConfigured;
+  return normalizeLanguageModelProviderConfig(next, defaults);
+}
+
+function mergeLanguageModelSettings(current, patch) {
+  const defaults = getDefaultLanguageModelSettings();
+  const sourceProviders = patch?.providers || {};
+  const nextProviders = {};
+
+  for (const provider of LANGUAGE_MODEL_PROVIDERS) {
+    nextProviders[provider] = mergeLanguageModelProviderConfig(
+      current.providers[provider],
+      sourceProviders[provider],
+      defaults.providers[provider],
+    );
+  }
+
+  return normalizeLanguageModelSettings({ providers: nextProviders });
 }
 
 function normalizeLineBreaks(text) {
@@ -1868,6 +2112,240 @@ async function testQwenASRConnection(config) {
   }
 }
 
+function buildUrl(baseUrl, pathName) {
+  return `${String(baseUrl || '').replace(/\/$/, '')}${pathName}`;
+}
+
+async function parseJsonSafe(response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    return text ? { message: text } : null;
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function extractProviderErrorMessage(payload, fallback) {
+  if (!payload) {
+    return fallback;
+  }
+
+  if (typeof payload === 'string') {
+    return payload;
+  }
+
+  const directMessage = payload?.error?.message || payload?.message || payload?.msg;
+  if (directMessage) {
+    return String(directMessage);
+  }
+
+  const directCode = payload?.error?.code || payload?.code;
+  if (directCode) {
+    return `${fallback} [${directCode}]`;
+  }
+
+  return fallback;
+}
+
+async function requestJson(url, init) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LLM_TEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+    const payload = await parseJsonSafe(response);
+    return { response, payload };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function testOpenAICompatibleChat(provider, config) {
+  const { response, payload } = await requestJson(buildUrl(config.baseUrl, '/chat/completions'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        {
+          role: 'user',
+          content: 'Reply with OK.',
+        },
+      ],
+      temperature: config.temperature,
+      max_tokens: config.maxTokens,
+    }),
+  });
+
+  if (!response.ok) {
+    return {
+      success: false,
+      message: extractProviderErrorMessage(
+        payload,
+        `${provider} 连接失败 (HTTP ${response.status})`,
+      ),
+      provider,
+    };
+  }
+
+  return {
+    success: true,
+    message: '连接测试通过',
+    provider,
+  };
+}
+
+async function testClaudeConnection(config) {
+  const { response, payload } = await requestJson(buildUrl(config.baseUrl, '/messages'), {
+    method: 'POST',
+    headers: {
+      'x-api-key': config.apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: config.model,
+      max_tokens: config.maxTokens,
+      temperature: config.temperature,
+      messages: [
+        {
+          role: 'user',
+          content: 'Reply with OK.',
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    return {
+      success: false,
+      message: extractProviderErrorMessage(payload, `Claude 连接失败 (HTTP ${response.status})`),
+      provider: 'claude',
+    };
+  }
+
+  return {
+    success: true,
+    message: '连接测试通过',
+    provider: 'claude',
+  };
+}
+
+async function testGeminiConnection(config) {
+  const modelPath = `/models/${encodeURIComponent(config.model)}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
+  const { response, payload } = await requestJson(buildUrl(config.baseUrl, modelPath), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: 'Reply with OK.' }],
+        },
+      ],
+      generationConfig: {
+        temperature: config.temperature,
+        maxOutputTokens: config.maxTokens,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    return {
+      success: false,
+      message: extractProviderErrorMessage(payload, `Gemini 连接失败 (HTTP ${response.status})`),
+      provider: 'gemini',
+    };
+  }
+
+  return {
+    success: true,
+    message: '连接测试通过',
+    provider: 'gemini',
+  };
+}
+
+function validateLanguageModelTestInput(provider, config) {
+  if (!LANGUAGE_MODEL_PROVIDERS.includes(provider)) {
+    throw new Error('不支持的语言模型 Provider');
+  }
+  if (!String(config?.apiKey || '').trim() && config?.apiKeyConfigured !== true) {
+    throw new Error('API Key 不能为空');
+  }
+  if (!String(config?.model || '').trim()) {
+    throw new Error('Model 不能为空');
+  }
+  if (!String(config?.baseUrl || '').trim()) {
+    throw new Error('Base URL 不能为空');
+  }
+}
+
+async function testLanguageModelConnection(provider, config) {
+  validateLanguageModelTestInput(provider, config);
+
+  const currentSettings = await loadLanguageModelSettings();
+  const mergedConfig = mergeLanguageModelProviderConfig(
+    currentSettings.providers[provider],
+    config,
+    {
+      apiKey: '',
+      model: '',
+      baseUrl: '',
+      temperature: 0.7,
+      maxTokens: 4096,
+      enabled: false,
+    },
+  );
+
+  const normalized = normalizeLanguageModelProviderConfig(mergedConfig, {
+    apiKey: '',
+    model: '',
+    baseUrl: '',
+    temperature: 0.7,
+    maxTokens: 4096,
+    enabled: false,
+  });
+
+  try {
+    if (provider === 'openai' || provider === 'qwen' || provider === 'zhipu') {
+      return await testOpenAICompatibleChat(provider, normalized);
+    }
+
+    if (provider === 'claude') {
+      return await testClaudeConnection(normalized);
+    }
+
+    if (provider === 'gemini') {
+      return await testGeminiConnection(normalized);
+    }
+
+    throw new Error('不支持的语言模型 Provider');
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { success: false, message: '连接超时', provider };
+    }
+
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : '连接测试失败',
+      provider,
+    };
+  }
+}
+
 async function downloadFile(sourceUrl, targetPath, signal) {
   const response = await fetch(sourceUrl, { signal });
   if (!response.ok) {
@@ -2425,16 +2903,16 @@ function validateOnlineAsrRequest(engine, onlineASRConfig) {
 
 async function handleOptions(res) {
   res.writeHead(204, {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Private-Network': 'true',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    ...(res.__memoFlowCorsHeaders || {}),
   });
   res.end();
 }
 
 async function handleRequest(req, res) {
+  res.__memoFlowCorsHeaders = buildCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
+    assertTrustedOrigin(req);
     await handleOptions(res);
     return;
   }
@@ -2442,6 +2920,10 @@ async function handleRequest(req, res) {
   const pathname = parsePathname(req);
 
   try {
+    if (pathname !== '/health') {
+      assertTrustedOrigin(req);
+    }
+
     if (req.method === 'GET' && pathname === '/health') {
       sendJson(res, 200, {
         success: true,
@@ -2457,6 +2939,12 @@ async function handleRequest(req, res) {
     if (req.method === 'GET' && pathname === '/config') {
       const config = await loadConfig();
       sendJson(res, 200, { success: true, data: config });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/llm/config') {
+      const settings = await loadLanguageModelSettings();
+      sendJson(res, 200, { success: true, data: sanitizeLanguageModelSettings(settings) });
       return;
     }
 
@@ -2480,6 +2968,15 @@ async function handleRequest(req, res) {
       }
       await saveConfig(next);
       sendJson(res, 200, { success: true, data: next });
+      return;
+    }
+
+    if (req.method === 'PUT' && pathname === '/llm/config') {
+      const body = await readJsonBody(req);
+      const current = await loadLanguageModelSettings();
+      const next = mergeLanguageModelSettings(current, body);
+      await saveLanguageModelSettings(next);
+      sendJson(res, 200, { success: true, data: sanitizeLanguageModelSettings(next) });
       return;
     }
 
@@ -2542,6 +3039,22 @@ async function handleRequest(req, res) {
       const body = await readJsonBody(req);
       const result = await testQwenASRConnection(body);
       sendJson(res, 200, result);
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/llm/test') {
+      const body = await readJsonBody(req);
+      let result;
+      try {
+        result = await testLanguageModelConnection(body.provider, body.config);
+      } catch (error) {
+        sendJson(res, 400, {
+          success: false,
+          error: error instanceof Error ? error.message : '语言模型连接测试失败',
+        });
+        return;
+      }
+      sendJson(res, 200, { success: true, data: result });
       return;
     }
 
@@ -2679,7 +3192,7 @@ async function handleRequest(req, res) {
 
     sendJson(res, 404, { success: false, error: 'Not Found' });
   } catch (error) {
-    sendJson(res, 500, {
+    sendJson(res, error?.statusCode || 500, {
       success: false,
       error: error instanceof Error ? error.message : 'helper 请求失败',
     });

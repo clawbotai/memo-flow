@@ -20,6 +20,7 @@ import {
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { LanguageModelSettingsPanel } from "@/components/language-model-settings-panel";
 import {
   Dialog,
   DialogContent,
@@ -54,7 +55,7 @@ interface WhisperSettingsProps {
   initialSection?: SettingsSection;
 }
 
-type SettingsSection = "general" | "transcription" | "whisper";
+type SettingsSection = "general" | "language-models" | "transcription" | "whisper";
 export type { SettingsSection };
 
 interface DownloadProgress {
@@ -77,6 +78,12 @@ const SETTINGS_SECTIONS: Array<{
     label: "通用",
     description: "主题外观",
     icon: <Settings className="h-4 w-4" />,
+  },
+  {
+    id: "language-models",
+    label: "语言模型",
+    description: "文本大模型 Provider",
+    icon: <Zap className="h-4 w-4" />,
   },
   {
     id: "transcription",
@@ -1167,7 +1174,7 @@ function TranscriptionEnginePanel({ visible }: { visible: boolean }) {
   );
 }
 
-export function WhisperSettings({ open, onOpenChange, initialSection = "general" }: WhisperSettingsProps) {
+export function AppSettingsDialog({ open, onOpenChange, initialSection = "general" }: WhisperSettingsProps) {
   const [activeSection, setActiveSection] = React.useState<SettingsSection>("general");
 
   React.useEffect(() => {
@@ -1181,7 +1188,7 @@ export function WhisperSettings({ open, onOpenChange, initialSection = "general"
       <DialogContent className="w-[calc(100vw-1.5rem)] max-w-5xl gap-0 overflow-hidden p-0 sm:rounded-[1.5rem]">
         <DialogHeader className="border-b border-border/60 px-6 py-5">
           <DialogTitle>设置</DialogTitle>
-          <DialogDescription>管理应用偏好和语音转录环境。</DialogDescription>
+          <DialogDescription>管理应用偏好、语言模型和语音转录环境。</DialogDescription>
         </DialogHeader>
 
         <div className="grid max-h-[78vh] min-h-[560px] grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)]">
@@ -1220,6 +1227,7 @@ export function WhisperSettings({ open, onOpenChange, initialSection = "general"
 
           <div className="min-h-0 overflow-y-auto bg-background px-4 py-5 sm:px-6 sm:py-6">
             <GeneralSettingsPanel visible={activeSection === "general"} />
+            <LanguageModelSettingsPanel visible={activeSection === "language-models"} />
             <TranscriptionEnginePanel visible={activeSection === "transcription"} />
             <WhisperPanel
               open={open}
@@ -1232,3 +1240,5 @@ export function WhisperSettings({ open, onOpenChange, initialSection = "general"
     </Dialog>
   );
 }
+
+export const WhisperSettings = AppSettingsDialog;

@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { TranscriptionDetailTabs } from '@/components/transcription-detail-tabs';
 import { FlowLoader } from '@/components/ui/flow-loader';
-import { Copy, Check, ChevronDown, FileText, Clock } from 'lucide-react';
 import type { TranscribeSegment } from '@/types';
 import { TranscriptionRecord } from '@/types/transcription-history';
 import { useTranscriptionConfig } from '@/hooks/use-transcription-config';
@@ -16,6 +16,9 @@ import {
   isHelperUnavailableError,
 } from '@/lib/local-helper-client';
 import { upsertCachedTranscriptionRecord } from '@/lib/transcription-browser-cache';
+
+// scrollToBottom 回调类型：由 TranscriptTabPanel 在挂载后通过 onScrollRefReady 注册给父组件
+type ScrollToBottomFn = () => void;
 
 interface TranscriptionDetailProps {
   record: TranscriptionRecord;
@@ -40,36 +43,16 @@ const STATUS_COLOR: Record<string, string> = {
   error: 'bg-red-500',
 };
 
-/** 将 whisper timestamp 格式化为 MM:SS */
-function formatTimestamp(ts: string): string {
-  const match = ts.match(/(\d{2}):(\d{2}):(\d{2})/);
-  if (!match) return '00:00';
-  const totalMinutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
-  const seconds = parseInt(match[3], 10);
-  return `${String(totalMinutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
 const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => {
   const { config } = useTranscriptionConfig();
   const [liveRecord, setLiveRecord] = useState<TranscriptionRecord>(record);
   const [connected, setConnected] = useState(false);
   const [retranscribing, setRetranscribing] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
-  const copyMenuRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // scrollToBottom 由 TranscriptTabPanel 通过 onScrollToBottomReady 注册，父组件持有引用即可
+  const scrollToBottomRef = useRef<ScrollToBottomFn | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const doneRef = useRef(false);
-
-  // 自动滚动到底部
-  const scrollToBottom = useCallback(() => {
-    requestAnimationFrame(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      }
-    });
-  }, []);
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimeoutRef.current !== null) {
@@ -122,7 +105,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
 
         setLiveRecord(nextRecord);
         upsertCachedTranscriptionRecord(nextRecord);
-        scrollToBottom();
+        scrollToBottomRef.current?.();
 
         if (isTerminal) {
           doneRef.current = true;
@@ -156,7 +139,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
         }
       }, 3000);
     };
-  }, [clearReconnectTimer, record.id, scrollToBottom]);
+  }, [clearReconnectTimer, record.id]);
 
   // 连接 SSE
   useEffect(() => {
@@ -228,64 +211,10 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
   const isActive = status !== 'completed' && status !== 'error';
   const canRetranscribe = (status === 'completed' || status === 'error') && !!record.audioUrl;
 
-  // 复制纯文本（不含时间戳）
-  const handleCopyPlainText = useCallback(async () => {
-    const textToCopy = segments.length > 0
-      ? segments.map(seg => seg.text).join('\n')
-      : liveRecord.transcript || '';
-    
-    if (!textToCopy) return;
-    
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-      setCopied(true);
-      setCopyMenuOpen(false);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('复制失败:', error);
-    }
-  }, [segments, liveRecord.transcript]);
-
-  // 复制逐字稿（含时间戳）
-  const handleCopyWithTimestamp = useCallback(async () => {
-    const textToCopy = segments.length > 0
-      ? segments.map(seg => `[${seg.timestamp}] ${seg.text}`).join('\n')
-      : liveRecord.transcript || '';
-    
-    if (!textToCopy) return;
-    
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-      setCopied(true);
-      setCopyMenuOpen(false);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('复制失败:', error);
-    }
-  }, [segments, liveRecord.transcript]);
-
-  // 点击外部关闭复制菜单
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (copyMenuRef.current && !copyMenuRef.current.contains(event.target as Node)) {
-        setCopyMenuOpen(false);
-      }
-    };
-    
-    if (copyMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [copyMenuOpen]);
-
-  useEffect(() => {
-    if (segments.length > 0 || liveRecord.transcript) {
-      scrollToBottom();
-    }
-  }, [segments.length, liveRecord.transcript, scrollToBottom]);
+  // onScrollToBottomReady：由 TranscriptTabPanel 挂载后回调，注册其内部的 scrollToBottom 函数
+  const handleScrollToBottomReady = useCallback((fn: ScrollToBottomFn) => {
+    scrollToBottomRef.current = fn;
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-6 md:flex-row">
@@ -420,112 +349,15 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
       {/* ── 右侧：逐字稿 ── */}
       <div className="flex-1 min-w-0 flex flex-col">
         <Card className="flex min-h-[420px] flex-1 flex-col md:min-h-0">
-          <CardHeader className="pb-3 shrink-0">
-            <CardTitle className="flex items-center justify-between text-base">
-              <span>转录逐字稿</span>
-              <div className="flex items-center gap-2">
-                {isActive && connected && (
-                  <span className="flex items-center gap-1.5 text-xs text-blue-500">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                    实时更新中
-                  </span>
-                )}
-                <Badge variant="outline" className="text-xs">
-                  {segments.length} 片段
-                </Badge>
-                {/* 复制按钮 */}
-                {(segments.length > 0 || liveRecord.transcript) && (
-                  <div className="relative" ref={copyMenuRef}>
-                    <button
-                      onClick={() => setCopyMenuOpen(!copyMenuOpen)}
-                      className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-0.5"
-                      title="复制选项"
-                    >
-                      {copied ? (
-                        <Check className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                      <ChevronDown className="w-3 h-3" />
-                    </button>
-                    
-                    {/* 复制选项下拉菜单 */}
-                    {copyMenuOpen && (
-                      <div className="absolute right-0 top-full mt-1 w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-50">
-                        <button
-                          onClick={handleCopyPlainText}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2 transition-colors"
-                        >
-                          <FileText className="w-4 h-4 text-muted-foreground" />
-                          <span>纯文本</span>
-                        </button>
-                        <button
-                          onClick={handleCopyWithTimestamp}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2 transition-colors"
-                        >
-                          <Clock className="w-4 h-4 text-muted-foreground" />
-                          <span>带时间戳</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="flex-1 flex flex-col min-h-0 p-0 px-6 pb-6">
-            {segments.length > 0 ? (
-              /* ── 有 segments：逐行展示 ── */
-              <div
-                ref={scrollRef}
-                className="flex-1 overflow-y-auto space-y-0 scroll-smooth pr-2"
-              >
-                {segments.map((seg, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-baseline gap-4 py-2.5 border-b border-border/30 last:border-b-0"
-                  >
-                    <span className="text-xs text-muted-foreground font-mono tabular-nums shrink-0 w-11 pt-0.5">
-                      {formatTimestamp(seg.timestamp)}
-                    </span>
-                    <span className="text-sm leading-relaxed flex-1">{seg.text}</span>
-                  </div>
-                ))}
-
-                {/* 转录中时在末尾显示动画光标 */}
-                {isActive && (
-                  <div className="flex items-center gap-3 py-3">
-                    <span className="w-11 shrink-0" />
-                    <FlowLoader size="sm" />
-                    <span className="text-xs text-muted-foreground">转录中…</span>
-                  </div>
-                )}
-              </div>
-            ) : liveRecord.transcript ? (
-              /* ── 无 segments 但有纯文本（fallback）── */
-              <div
-                ref={scrollRef}
-                className="flex-1 overflow-y-auto whitespace-pre-wrap leading-relaxed text-sm pr-2"
-              >
-                {liveRecord.transcript}
-              </div>
-            ) : (
-              /* ── 空状态 ── */
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
-                {isActive ? (
-                  <>
-                    <FlowLoader size="md" />
-                    <p className="text-sm">
-                      {STATUS_TEXT[status] ?? '处理中'}，转录内容将实时出现…
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-sm">暂无转录内容</p>
-                )}
-              </div>
-            )}
-          </CardContent>
+          <TranscriptionDetailTabs
+            connected={connected}
+            isActive={isActive}
+            liveRecord={liveRecord}
+            onScrollToBottomReady={handleScrollToBottomReady}
+            segments={segments}
+            status={status}
+            statusText={STATUS_TEXT}
+          />
         </Card>
       </div>
     </div>
