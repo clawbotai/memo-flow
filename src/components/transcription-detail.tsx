@@ -189,6 +189,11 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
         wordCount: undefined,
         language: undefined,
         error: undefined,
+        mindmapStatus: 'idle',
+        mindmapUpdatedAt: undefined,
+        mindmapPath: undefined,
+        mindmapError: undefined,
+        mindmapGenerator: undefined,
         updatedAt: new Date(),
       };
 
@@ -214,6 +219,18 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
   // onScrollToBottomReady：由 TranscriptTabPanel 挂载后回调，注册其内部的 scrollToBottom 函数
   const handleScrollToBottomReady = useCallback((fn: ScrollToBottomFn) => {
     scrollToBottomRef.current = fn;
+  }, []);
+
+  const handleRecordPatch = useCallback((patch: Partial<TranscriptionRecord>) => {
+    setLiveRecord((prev) => {
+      const nextRecord: TranscriptionRecord = {
+        ...prev,
+        ...patch,
+        updatedAt: new Date(),
+      };
+      upsertCachedTranscriptionRecord(nextRecord);
+      return nextRecord;
+    });
   }, []);
 
   return (
@@ -354,6 +371,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
             isActive={isActive}
             liveRecord={liveRecord}
             onScrollToBottomReady={handleScrollToBottomReady}
+            onRecordPatch={handleRecordPatch}
             segments={segments}
             status={status}
             statusText={STATUS_TEXT}

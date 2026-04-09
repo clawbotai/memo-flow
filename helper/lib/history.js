@@ -3,7 +3,7 @@
 const fsp = require('fs/promises');
 const path = require('path');
 const { createHash } = require('crypto');
-const { PLAIN_TRANSCRIPT_FILE, TIMESTAMPED_TRANSCRIPT_FILE } = require('./constants');
+const { PLAIN_TRANSCRIPT_FILE, TIMESTAMPED_TRANSCRIPT_FILE, MINDMAP_FILE } = require('./constants');
 const { APP_DIR, HISTORY_FILE, ensureAppDirs } = require('./app-paths');
 const { writeSse } = require('./cors-sse');
 const { normalizeLineBreaks } = require('./text-utils');
@@ -268,10 +268,12 @@ async function buildImportedRecordFromDirectory(directoryPath) {
   const title = path.basename(savedPath);
   const plainTextPath = path.join(savedPath, PLAIN_TRANSCRIPT_FILE);
   const timestampedTextPath = path.join(savedPath, TIMESTAMPED_TRANSCRIPT_FILE);
+  const mindmapPath = path.join(savedPath, MINDMAP_FILE);
 
-  const [plainTextExists, timestampedTextExists] = await Promise.all([
+  const [plainTextExists, timestampedTextExists, mindmapExists] = await Promise.all([
     fsp.access(plainTextPath).then(() => true).catch(() => false),
     fsp.access(timestampedTextPath).then(() => true).catch(() => false),
+    fsp.access(mindmapPath).then(() => true).catch(() => false),
   ]);
 
   if (!plainTextExists && !timestampedTextExists) {
@@ -298,6 +300,7 @@ async function buildImportedRecordFromDirectory(directoryPath) {
     await Promise.all([
       plainTextExists ? getFileMtimeMs(plainTextPath) : Promise.resolve(null),
       timestampedTextExists ? getFileMtimeMs(timestampedTextPath) : Promise.resolve(null),
+      mindmapExists ? getFileMtimeMs(mindmapPath) : Promise.resolve(null),
     ])
   ).filter((value) => typeof value === 'number');
 
@@ -315,6 +318,9 @@ async function buildImportedRecordFromDirectory(directoryPath) {
     wordCount: transcript.length,
     language: 'zh',
     savedPath,
+    mindmapStatus: mindmapExists ? 'ready' : 'idle',
+    mindmapPath: mindmapExists ? mindmapPath : undefined,
+    mindmapUpdatedAt: mindmapExists ? timestamp : undefined,
     createdAt: timestamp,
     updatedAt: timestamp,
   });

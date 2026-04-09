@@ -28,6 +28,7 @@ const {
   saveTranscriptionResult,
   parseSrtSegments,
 } = require('./audio-pipeline');
+const { getMindMapPath } = require('./mindmap');
 
 async function runEngine(context, record, engine, onlineASRConfig) {
   const updateRecord = createRecordUpdateEmitter(record.id);
@@ -292,6 +293,14 @@ async function runRetranscription(taskId, engine, onlineASRConfig) {
   const updateRecord = createRecordUpdateEmitter(taskId);
 
   try {
+    if (record.savedPath) {
+      await fsp.unlink(getMindMapPath(record.savedPath)).catch((error) => {
+        if (error && error.code !== 'ENOENT') {
+          throw error;
+        }
+      });
+    }
+
     await updateRecord({
       status: engine === 'qwen-asr' ? 'transcribing' : 'downloading_audio',
       progress: 0,
@@ -300,6 +309,11 @@ async function runRetranscription(taskId, engine, onlineASRConfig) {
       wordCount: undefined,
       language: undefined,
       error: undefined,
+      mindmapStatus: 'idle',
+      mindmapUpdatedAt: undefined,
+      mindmapPath: undefined,
+      mindmapError: undefined,
+      mindmapGenerator: undefined,
     });
 
     await runEngine(

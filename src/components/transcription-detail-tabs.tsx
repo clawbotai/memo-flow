@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { CardContent, CardHeader } from '@/components/ui/card';
 import { FlowLoader } from '@/components/ui/flow-loader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TranscriptionMindMap } from '@/components/transcription-mindmap';
 import type { TranscribeSegment } from '@/types';
 import type { TranscriptionRecord } from '@/types/transcription-history';
 import { formatWhisperTimestamp } from '@/lib/utils';
@@ -17,6 +18,7 @@ interface TranscriptionDetailTabsProps {
   isActive: boolean;
   liveRecord: TranscriptionRecord;
   onScrollToBottomReady: (fn: () => void) => void;
+  onRecordPatch: (patch: Partial<TranscriptionRecord>) => void;
   segments: TranscribeSegment[];
   status: string;
   statusText: Record<string, string>;
@@ -225,13 +227,11 @@ function SummaryTabPanel({ status }: Pick<TranscriptionDetailTabsProps, 'status'
   );
 }
 
-function MindmapTabPanel({ status }: Pick<TranscriptionDetailTabsProps, 'status'>) {
-  return (
-    <ReservedPanel
-      title="思维导图预留中"
-      description={status === 'completed' ? '后续可在这里展示从转录内容生成的思维导图。' : '转录完成后可在这里展示结构化的思维导图内容。'}
-    />
-  );
+function MindmapTabPanel({
+  liveRecord,
+  onRecordPatch,
+}: Pick<TranscriptionDetailTabsProps, 'liveRecord' | 'onRecordPatch'>) {
+  return <TranscriptionMindMap record={liveRecord} onRecordPatch={onRecordPatch} />;
 }
 
 export function TranscriptionDetailTabs(props: TranscriptionDetailTabsProps) {
@@ -261,7 +261,7 @@ export function TranscriptionDetailTabs(props: TranscriptionDetailTabsProps) {
         </TabsContent>
 
         <TabsContent value="mindmap" className="mt-0 flex h-full min-h-0 flex-1 flex-col border-0 bg-transparent p-0 data-[state=inactive]:hidden">
-          <MindmapTabPanel status={props.status} />
+          <MindmapTabPanel liveRecord={props.liveRecord} onRecordPatch={props.onRecordPatch} />
         </TabsContent>
       </CardContent>
     </Tabs>

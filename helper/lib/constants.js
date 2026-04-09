@@ -40,6 +40,7 @@ const HOMEBREW_INSTALL_COMMAND =
   '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
 const PLAIN_TRANSCRIPT_FILE = '纯文本.txt';
 const TIMESTAMPED_TRANSCRIPT_FILE = '逐字稿.txt';
+const MINDMAP_FILE = '思维导图.json';
 
 module.exports = {
   APP_NAME,
@@ -65,4 +66,5 @@ module.exports = {
   HOMEBREW_INSTALL_COMMAND,
   PLAIN_TRANSCRIPT_FILE,
   TIMESTAMPED_TRANSCRIPT_FILE,
+  MINDMAP_FILE,
 };

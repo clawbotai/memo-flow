@@ -38,9 +38,13 @@ const {
   safeUnlink,
   testQwenASRConnection,
   testLanguageModelConnection,
+  readMindMapDocument,
+  writeMindMapDocument,
+  generateMindMapDocument,
   runNewTranscription,
   runRetranscription,
 } = require('./transcription');
+const { createRecordUpdateEmitter } = require('./history');
 const state = require('./state');
 
 // ─── Model download ────────────────────────────────────────────────────────────
@@ -410,6 +414,113 @@ async function handleRequest(req, res) {
 
       await removeRecord(taskId);
       sendJson(res, 200, { success: true, data: { id: taskId } });
+      return;
+    }
+
+    const mindmapMatch = pathname.match(/^\/transcriptions\/([^/]+)\/mindmap$/);
+    if (mindmapMatch && req.method === 'GET') {
+      const taskId = mindmapMatch[1];
+      const record = await getRecord(taskId);
+      if (!record) {
+        sendJson(res, 404, { success: false, error: '转录记录不存在' });
+        return;
+      }
+      if (!record.mindmapPath && !record.savedPath) {
+        sendJson(res, 404, { success: false, error: '当前转录尚未生成思维导图' });
+        return;
+      }
+
+      try {
+        const document = await readMindMapDocument(record.savedPath || path.dirname(record.mindmapPath));
+        sendJson(res, 200, { success: true, data: { document } });
+      } catch (error) {
+        sendJson(res, 404, {
+          success: false,
+          error: error instanceof Error ? error.message : '思维导图不存在',
+        });
+      }
+      return;
+    }
+
+    if (mindmapMatch && req.method === 'POST') {
+      const taskId = mindmapMatch[1];
+      const body = await readJsonBody(req);
+      const record = await getRecord(taskId);
+      if (!record) {
+        sendJson(res, 404, { success: false, error: '转录记录不存在' });
+        return;
+      }
+      if (record.status !== 'completed') {
+        sendJson(res, 400, { success: false, error: '仅已完成的转录可生成思维导图' });
+        return;
+      }
+      if (!record.savedPath) {
+        sendJson(res, 400, { success: false, error: '当前转录缺少保存目录，无法生成思维导图' });
+        return;
+      }
+      if (!body.provider) {
+        sendJson(res, 400, { success: false, error: '未指定语言模型 Provider' });
+        return;
+      }
+
+      const updateRecord = createRecordUpdateEmitter(taskId);
+      const hadMindmap = Boolean(record.mindmapPath);
+
+      await updateRecord({
+        mindmapStatus: 'generating',
+        mindmapError: undefined,
+      });
+
+      try {
+        const { document, generator } = await generateMindMapDocument(record, body.provider);
+        const saved = await writeMindMapDocument(record.savedPath, document);
+        await updateRecord({
+          mindmapStatus: 'ready',
+          mindmapUpdatedAt: new Date(),
+          mindmapPath: saved.path,
+          mindmapError: undefined,
+          mindmapGenerator: generator,
+        });
+        sendJson(res, 200, { success: true, data: { document: saved.document } });
+      } catch (error) {
+        await updateRecord({
+          mindmapStatus: hadMindmap ? 'ready' : 'error',
+          mindmapError: error instanceof Error ? error.message : '思维导图生成失败',
+        });
+        sendJson(res, 500, {
+          success: false,
+          error: error instanceof Error ? error.message : '思维导图生成失败',
+        });
+      }
+      return;
+    }
+
+    if (mindmapMatch && req.method === 'PUT') {
+      const taskId = mindmapMatch[1];
+      const body = await readJsonBody(req);
+      const record = await getRecord(taskId);
+      if (!record) {
+        sendJson(res, 404, { success: false, error: '转录记录不存在' });
+        return;
+      }
+      if (!record.savedPath) {
+        sendJson(res, 400, { success: false, error: '当前转录缺少保存目录，无法保存思维导图' });
+        return;
+      }
+      if (!body.document || typeof body.document !== 'object') {
+        sendJson(res, 400, { success: false, error: '思维导图数据格式无效' });
+        return;
+      }
+
+      const saved = await writeMindMapDocument(record.savedPath, body.document);
+      const updateRecord = createRecordUpdateEmitter(taskId);
+      await updateRecord({
+        mindmapStatus: 'ready',
+        mindmapUpdatedAt: new Date(),
+        mindmapPath: saved.path,
+        mindmapError: undefined,
+      });
+      sendJson(res, 200, { success: true, data: { document: saved.document } });
       return;
     }
 

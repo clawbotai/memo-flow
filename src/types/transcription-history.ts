@@ -1,4 +1,5 @@
-import { TranscribeSegment } from './index';
+import type { TranscribeSegment } from './index';
+import type { MindMapGeneratorInfo } from './mindmap';
 
 export interface TranscriptionRecord {
   id: string;                   // 转录记录唯一ID
@@ -16,6 +17,11 @@ export interface TranscriptionRecord {
   updatedAt: Date;             // 最后更新时间
   language?: string;           // 检测到的语言
   duration?: number;           // 音频时长
+  mindmapStatus?: 'idle' | 'generating' | 'ready' | 'error';
+  mindmapUpdatedAt?: Date;
+  mindmapPath?: string;
+  mindmapError?: string;
+  mindmapGenerator?: MindMapGeneratorInfo;
 }
 
 export interface TranscriptionHistoryState {

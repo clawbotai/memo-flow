@@ -11,6 +11,7 @@ function normalizeRecord(record: TranscriptionRecord): TranscriptionRecord {
     segments: Array.isArray(record.segments) ? record.segments : [],
     createdAt: new Date(record.createdAt),
     updatedAt: new Date(record.updatedAt),
+    mindmapUpdatedAt: record.mindmapUpdatedAt ? new Date(record.mindmapUpdatedAt) : undefined,
   };
 }
 
@@ -46,6 +47,11 @@ function toCachedRecord(record: TranscriptionRecord): TranscriptionRecord {
     updatedAt: record.updatedAt,
     language: record.language,
     duration: record.duration,
+    mindmapStatus: record.mindmapStatus,
+    mindmapUpdatedAt: record.mindmapUpdatedAt,
+    mindmapPath: record.mindmapPath,
+    mindmapError: record.mindmapError,
+    mindmapGenerator: record.mindmapGenerator,
     segments: [],
     transcript: undefined,
   };
