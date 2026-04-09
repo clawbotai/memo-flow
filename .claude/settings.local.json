@@ -1,13 +1,31 @@
 {
   "permissions": {
-    "defaultMode": "bypassPermissions",
     "allow": [
       "WebFetch(domain:memo.ac)",
       "WebSearch",
       "Bash(npx next:*)",
       "Bash(npx tsc:*)",
       "Bash(gh pr:*)",
-      "Bash(ls -la /Users/mondoi/Documents/tinyidea/projects/memo-flow/src/app/transcriptions/[id]/)"
-    ]
+      "Bash(ls -la /Users/mondoi/Documents/tinyidea/projects/memo-flow/src/app/transcriptions/[id]/)",
+      "Bash(node --check lib/constants.js)",
+      "Bash(node --check lib/state.js)",
+      "Bash(node --check lib/app-paths.js)",
+      "Bash(node --check lib/text-utils.js)",
+      "Bash(node --check lib/cors-sse.js)",
+      "Bash(node --check lib/config.js)",
+      "Bash(node --check lib/history.js)",
+      "Bash(node --check lib/exec.js)",
+      "Bash(node --check lib/transcription.js)",
+      "Bash(node --check lib/http-handler.js)",
+      "Bash(node --check server.js)",
+      "Bash(timeout 8 node server.js)",
+      "Bash(curl -s http://127.0.0.1:47392/health)",
+      "Bash(curl -s -H \"Origin: http://localhost:1420\" http://127.0.0.1:47392/config)",
+      "Bash(python3 -m json.tool --no-ensure-ascii)",
+      "Bash(curl -s -H \"Origin: http://localhost:1420\" http://127.0.0.1:47392/llm/config)",
+      "Bash(curl -s -H \"Origin: http://localhost:1420\" http://127.0.0.1:47392/transcriptions)",
+      "Bash(curl -s -H \"Origin: http://localhost:1420\" http://127.0.0.1:47392/whisper/status)"
+    ],
+    "defaultMode": "bypassPermissions"
   }
 }
