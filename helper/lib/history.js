@@ -3,7 +3,13 @@
 const fsp = require('fs/promises');
 const path = require('path');
 const { createHash } = require('crypto');
-const { PLAIN_TRANSCRIPT_FILE, TIMESTAMPED_TRANSCRIPT_FILE, MINDMAP_FILE } = require('./constants');
+const {
+  PLAIN_TRANSCRIPT_FILE,
+  TIMESTAMPED_TRANSCRIPT_FILE,
+  MINDMAP_FILE,
+  CONTENT_POINTS_FILE,
+  CONTENT_DRAFTS_FILE,
+} = require('./constants');
 const { APP_DIR, HISTORY_FILE, ensureAppDirs } = require('./app-paths');
 const { writeSse } = require('./cors-sse');
 const { normalizeLineBreaks } = require('./text-utils');
@@ -269,11 +275,15 @@ async function buildImportedRecordFromDirectory(directoryPath) {
   const plainTextPath = path.join(savedPath, PLAIN_TRANSCRIPT_FILE);
   const timestampedTextPath = path.join(savedPath, TIMESTAMPED_TRANSCRIPT_FILE);
   const mindmapPath = path.join(savedPath, MINDMAP_FILE);
+  const contentPointsPath = path.join(savedPath, CONTENT_POINTS_FILE);
+  const contentDraftsPath = path.join(savedPath, CONTENT_DRAFTS_FILE);
 
-  const [plainTextExists, timestampedTextExists, mindmapExists] = await Promise.all([
+  const [plainTextExists, timestampedTextExists, mindmapExists, contentPointsExists, contentDraftsExists] = await Promise.all([
     fsp.access(plainTextPath).then(() => true).catch(() => false),
     fsp.access(timestampedTextPath).then(() => true).catch(() => false),
     fsp.access(mindmapPath).then(() => true).catch(() => false),
+    fsp.access(contentPointsPath).then(() => true).catch(() => false),
+    fsp.access(contentDraftsPath).then(() => true).catch(() => false),
   ]);
 
   if (!plainTextExists && !timestampedTextExists) {
@@ -296,13 +306,27 @@ async function buildImportedRecordFromDirectory(directoryPath) {
     transcript = transcript.trim();
   }
 
-  const mtimes = (
-    await Promise.all([
-      plainTextExists ? getFileMtimeMs(plainTextPath) : Promise.resolve(null),
-      timestampedTextExists ? getFileMtimeMs(timestampedTextPath) : Promise.resolve(null),
-      mindmapExists ? getFileMtimeMs(mindmapPath) : Promise.resolve(null),
-    ])
-  ).filter((value) => typeof value === 'number');
+  const [
+    plainTextMtime,
+    timestampedTextMtime,
+    mindmapMtime,
+    contentPointsMtime,
+    contentDraftsMtime,
+  ] = await Promise.all([
+    plainTextExists ? getFileMtimeMs(plainTextPath) : Promise.resolve(null),
+    timestampedTextExists ? getFileMtimeMs(timestampedTextPath) : Promise.resolve(null),
+    mindmapExists ? getFileMtimeMs(mindmapPath) : Promise.resolve(null),
+    contentPointsExists ? getFileMtimeMs(contentPointsPath) : Promise.resolve(null),
+    contentDraftsExists ? getFileMtimeMs(contentDraftsPath) : Promise.resolve(null),
+  ]);
+
+  const mtimes = [
+    plainTextMtime,
+    timestampedTextMtime,
+    mindmapMtime,
+    contentPointsMtime,
+    contentDraftsMtime,
+  ].filter((value) => typeof value === 'number');
 
   const timestamp = mtimes.length ? new Date(Math.max(...mtimes)) : new Date();
   const id = buildImportedRecordId(savedPath);
@@ -320,7 +344,11 @@ async function buildImportedRecordFromDirectory(directoryPath) {
     savedPath,
     mindmapStatus: mindmapExists ? 'ready' : 'idle',
     mindmapPath: mindmapExists ? mindmapPath : undefined,
-    mindmapUpdatedAt: mindmapExists ? timestamp : undefined,
+    mindmapUpdatedAt: mindmapMtime ? new Date(mindmapMtime) : undefined,
+    pointExtractionStatus: contentPointsExists ? 'ready' : 'idle',
+    pointExtractionUpdatedAt: contentPointsMtime ? new Date(contentPointsMtime) : undefined,
+    contentGenerationStatus: contentDraftsExists ? 'ready' : 'idle',
+    contentGenerationUpdatedAt: contentDraftsMtime ? new Date(contentDraftsMtime) : undefined,
     createdAt: timestamp,
     updatedAt: timestamp,
   });

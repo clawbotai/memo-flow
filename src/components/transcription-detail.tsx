@@ -194,6 +194,12 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
         mindmapPath: undefined,
         mindmapError: undefined,
         mindmapGenerator: undefined,
+        pointExtractionStatus: 'idle',
+        pointExtractionUpdatedAt: undefined,
+        pointExtractionError: undefined,
+        contentGenerationStatus: 'idle',
+        contentGenerationUpdatedAt: undefined,
+        contentGenerationError: undefined,
         updatedAt: new Date(),
       };
 

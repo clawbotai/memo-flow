@@ -38,6 +38,12 @@ const {
   safeUnlink,
   testQwenASRConnection,
   testLanguageModelConnection,
+  loadContentPoints,
+  saveContentPoints,
+  extractContentPoints,
+  loadContentDrafts,
+  saveContentDraft,
+  generatePlatformContent,
   readMindMapDocument,
   writeMindMapDocument,
   generateMindMapDocument,
@@ -521,6 +527,241 @@ async function handleRequest(req, res) {
         mindmapError: undefined,
       });
       sendJson(res, 200, { success: true, data: { document: saved.document } });
+      return;
+    }
+
+    const contentPointsMatch = pathname.match(/^\/transcriptions\/([^/]+)\/content-points$/);
+    if (contentPointsMatch && req.method === 'GET') {
+      const taskId = contentPointsMatch[1];
+      const record = await getRecord(taskId);
+      if (!record) {
+        sendJson(res, 404, { success: false, error: '转录记录不存在' });
+        return;
+      }
+      if (!record.savedPath) {
+        sendJson(res, 404, {
+          success: false,
+          error: '当前转录尚未生成观点结果',
+          code: 'POINTS_NOT_FOUND',
+        });
+        return;
+      }
+
+      try {
+        const result = await loadContentPoints(record.savedPath);
+        sendJson(res, 200, { success: true, data: { result } });
+      } catch (error) {
+        sendJson(res, 404, {
+          success: false,
+          error: error instanceof Error ? error.message : '观点结果不存在',
+          code: 'POINTS_NOT_FOUND',
+        });
+      }
+      return;
+    }
+
+    const contentPointsGenerateMatch = pathname.match(/^\/transcriptions\/([^/]+)\/content-points\/generate$/);
+    if (contentPointsGenerateMatch && req.method === 'POST') {
+      const taskId = contentPointsGenerateMatch[1];
+      const body = await readJsonBody(req);
+      const record = await getRecord(taskId);
+      if (!record) {
+        sendJson(res, 404, { success: false, error: '转录记录不存在' });
+        return;
+      }
+      if (record.status !== 'completed') {
+        sendJson(res, 400, {
+          success: false,
+          error: '仅已完成的转录可提炼观点',
+          code: 'TRANSCRIPT_NOT_COMPLETED',
+        });
+        return;
+      }
+      if (!record.savedPath) {
+        sendJson(res, 400, { success: false, error: '当前转录缺少保存目录，无法提炼观点' });
+        return;
+      }
+      if (!body.provider) {
+        sendJson(res, 400, {
+          success: false,
+          error: '未指定语言模型 Provider',
+          code: 'PROVIDER_NOT_CONFIGURED',
+        });
+        return;
+      }
+
+      let hadPoints = false;
+      try {
+        await loadContentPoints(record.savedPath);
+        hadPoints = true;
+      } catch {}
+
+      const updateRecord = createRecordUpdateEmitter(taskId);
+      await updateRecord({
+        pointExtractionStatus: 'generating',
+        pointExtractionError: undefined,
+      });
+
+      try {
+        const { result } = await extractContentPoints(record, body.provider);
+        const saved = await saveContentPoints(record.savedPath, result);
+        await updateRecord({
+          pointExtractionStatus: 'ready',
+          pointExtractionUpdatedAt: new Date(saved.result.updatedAt),
+          pointExtractionError: undefined,
+        });
+        sendJson(res, 200, { success: true, data: { result: saved.result } });
+      } catch (error) {
+        await updateRecord({
+          pointExtractionStatus: hadPoints ? 'ready' : 'error',
+          pointExtractionError: error instanceof Error ? error.message : '观点提炼失败',
+        });
+        sendJson(res, 500, {
+          success: false,
+          error: error instanceof Error ? error.message : '观点提炼失败',
+          code: 'GENERATION_FAILED',
+        });
+      }
+      return;
+    }
+
+    const contentMatch = pathname.match(/^\/transcriptions\/([^/]+)\/content$/);
+    if (contentMatch && req.method === 'GET') {
+      const taskId = contentMatch[1];
+      const record = await getRecord(taskId);
+      if (!record) {
+        sendJson(res, 404, { success: false, error: '转录记录不存在' });
+        return;
+      }
+      if (!record.savedPath) {
+        sendJson(res, 404, {
+          success: false,
+          error: '当前转录尚未生成内容草稿',
+          code: 'CONTENT_NOT_FOUND',
+        });
+        return;
+      }
+
+      try {
+        const collection = await loadContentDrafts(record.savedPath);
+        sendJson(res, 200, { success: true, data: { drafts: collection.drafts } });
+      } catch (error) {
+        sendJson(res, 404, {
+          success: false,
+          error: error instanceof Error ? error.message : '内容草稿不存在',
+          code: 'CONTENT_NOT_FOUND',
+        });
+      }
+      return;
+    }
+
+    const contentGenerateMatch = pathname.match(/^\/transcriptions\/([^/]+)\/content\/generate$/);
+    if (contentGenerateMatch && req.method === 'POST') {
+      const taskId = contentGenerateMatch[1];
+      const body = await readJsonBody(req);
+      const record = await getRecord(taskId);
+      if (!record) {
+        sendJson(res, 404, { success: false, error: '转录记录不存在' });
+        return;
+      }
+      if (record.status !== 'completed') {
+        sendJson(res, 400, {
+          success: false,
+          error: '仅已完成的转录可生成内容',
+          code: 'TRANSCRIPT_NOT_COMPLETED',
+        });
+        return;
+      }
+      if (!record.savedPath) {
+        sendJson(res, 400, { success: false, error: '当前转录缺少保存目录，无法生成内容' });
+        return;
+      }
+      if (!body.provider) {
+        sendJson(res, 400, {
+          success: false,
+          error: '未指定语言模型 Provider',
+          code: 'PROVIDER_NOT_CONFIGURED',
+        });
+        return;
+      }
+      if (!Array.isArray(body.selectedPointIds) || body.selectedPointIds.length === 0) {
+        sendJson(res, 400, {
+          success: false,
+          error: '请至少选择一条观点',
+          code: 'POINTS_NOT_SELECTED',
+        });
+        return;
+      }
+      if (body.platform !== 'redbook') {
+        sendJson(res, 400, {
+          success: false,
+          error: 'Phase 1 仅支持小红书平台',
+          code: 'UNSUPPORTED_PLATFORM',
+        });
+        return;
+      }
+
+      let pointResult;
+      try {
+        pointResult = await loadContentPoints(record.savedPath);
+      } catch (error) {
+        sendJson(res, 400, {
+          success: false,
+          error: '请先提炼观点后再生成内容',
+          code: 'POINTS_NOT_FOUND',
+        });
+        return;
+      }
+
+      const selectedPointSet = new Set(body.selectedPointIds.map((item) => String(item)));
+      const selectedPoints = pointResult.points.filter((point) => selectedPointSet.has(point.id));
+      if (!selectedPoints.length) {
+        sendJson(res, 400, {
+          success: false,
+          error: '未找到有效的已选观点',
+          code: 'POINTS_NOT_SELECTED',
+        });
+        return;
+      }
+
+      let existingDraft = null;
+      try {
+        const collection = await loadContentDrafts(record.savedPath);
+        existingDraft = collection.drafts?.redbook || null;
+      } catch {}
+
+      const updateRecord = createRecordUpdateEmitter(taskId);
+      await updateRecord({
+        contentGenerationStatus: 'generating',
+        contentGenerationError: undefined,
+      });
+
+      try {
+        const { draft } = await generatePlatformContent(
+          record,
+          selectedPoints,
+          body.platform,
+          body.provider,
+          existingDraft,
+        );
+        const saved = await saveContentDraft(record.savedPath, draft);
+        await updateRecord({
+          contentGenerationStatus: 'ready',
+          contentGenerationUpdatedAt: new Date(saved.draft.updatedAt),
+          contentGenerationError: undefined,
+        });
+        sendJson(res, 200, { success: true, data: { draft: saved.draft } });
+      } catch (error) {
+        await updateRecord({
+          contentGenerationStatus: existingDraft ? 'ready' : 'error',
+          contentGenerationError: error instanceof Error ? error.message : '内容生成失败',
+        });
+        sendJson(res, 500, {
+          success: false,
+          error: error instanceof Error ? error.message : '内容生成失败',
+          code: 'GENERATION_FAILED',
+        });
+      }
       return;
     }
 

@@ -22,6 +22,12 @@ export interface TranscriptionRecord {
   mindmapPath?: string;
   mindmapError?: string;
   mindmapGenerator?: MindMapGeneratorInfo;
+  pointExtractionStatus?: 'idle' | 'generating' | 'ready' | 'error';
+  pointExtractionUpdatedAt?: Date;
+  pointExtractionError?: string;
+  contentGenerationStatus?: 'idle' | 'generating' | 'ready' | 'error';
+  contentGenerationUpdatedAt?: Date;
+  contentGenerationError?: string;
 }
 
 export interface TranscriptionHistoryState {

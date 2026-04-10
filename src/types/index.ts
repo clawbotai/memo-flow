@@ -2,6 +2,7 @@ export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  code?: string;
 }
 
 export type LanguageModelProvider = 'openai' | 'claude' | 'gemini' | 'qwen' | 'zhipu';
@@ -124,3 +125,5 @@ export interface LocalRuntimeInstallProgress {
 
 /** 兼容旧调用方，保留该类型名 */
 export type TranscriptionConfig = BrowserTranscriptionConfig;
+
+export * from './content-generation';

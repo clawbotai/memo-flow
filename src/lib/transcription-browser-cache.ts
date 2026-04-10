@@ -12,6 +12,12 @@ function normalizeRecord(record: TranscriptionRecord): TranscriptionRecord {
     createdAt: new Date(record.createdAt),
     updatedAt: new Date(record.updatedAt),
     mindmapUpdatedAt: record.mindmapUpdatedAt ? new Date(record.mindmapUpdatedAt) : undefined,
+    pointExtractionUpdatedAt: record.pointExtractionUpdatedAt
+      ? new Date(record.pointExtractionUpdatedAt)
+      : undefined,
+    contentGenerationUpdatedAt: record.contentGenerationUpdatedAt
+      ? new Date(record.contentGenerationUpdatedAt)
+      : undefined,
   };
 }
 
@@ -52,6 +58,12 @@ function toCachedRecord(record: TranscriptionRecord): TranscriptionRecord {
     mindmapPath: record.mindmapPath,
     mindmapError: record.mindmapError,
     mindmapGenerator: record.mindmapGenerator,
+    pointExtractionStatus: record.pointExtractionStatus,
+    pointExtractionUpdatedAt: record.pointExtractionUpdatedAt,
+    pointExtractionError: record.pointExtractionError,
+    contentGenerationStatus: record.contentGenerationStatus,
+    contentGenerationUpdatedAt: record.contentGenerationUpdatedAt,
+    contentGenerationError: record.contentGenerationError,
     segments: [],
     transcript: undefined,
   };

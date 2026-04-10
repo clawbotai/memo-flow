@@ -1,0 +1,999 @@
+╭─── Claude Code v2.1.97 ──────────────────────────────────────────────────────╮
+│                                             │ Tips for getting started       │
+│                Welcome back!                │ Run /init to create a CLAUDE.… │
+│                                             │ ────────────────────────────── │
+│                   ▐▛███▜▌                   │ Recent activity                │
+│                  ▝▜█████▛▘                  │ 6h ago  继续完善计划书         │
+│                    ▘▘ ▝▝                    │ /resume for more               │
+│                                             │                                │
+│      qwen3.5-plus · API Usage Billing       │                                │
+│   ~/Documents/tinyidea/projects/memo-flow   │                                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+❯ /model                                                                        
+  ⎿  Set model to qwen3.5-plus (default)
+
+❯ @prd.md                                                                       
+  阅读整个文档，现在我项结合文档做一个自媒体内容生成功能，考虑下整体功能设计    
+  ⎿  Read prd.md (506 lines)
+
+⏺ 我已阅读完整篇 PRD
+  文档。现在让我根据你的需求，设计一个自媒体内容生成功能的整体方案。
+
+  ---
+  📋 功能设计概览
+
+  基于文档核心思想 Content → Distribution Engine，我为你设计以下方案：
+
+  ---
+  一、核心流程（Pipeline）
+
+  输入（播客/视频/文章）
+      ↓
+  Whisper 转录 → transcript.json
+      ↓
+  内容理解 → insights.json
+      ↓
+  观点提炼 → points.json
+      ↓
+  爆款加工 → viralPoints.json
+      ↓
+  内容生成 → {twitter, redbook, article}.json
+      ↓
+  去 AI 味 → final.json
+
+  ---
+  二、功能模块设计
+
+  1️⃣ 输入层
+
+  - 支持三种输入：
+    - YouTube/B 站视频链接（自动下载音频）
+    - 音频文件上传（mp3/wav）
+    - 文字/文章粘贴
+
+  2️⃣ 解析层（可视化核心）
+
+  采用分层展开式 UI：
+
+  ┌─────────────────────────────────────┐
+  │ 📥 原始输入                          │
+  │   [转录文本折叠区]                   │
+  └─────────────────────────────────────┘
+             ↓
+  ┌─────────────────────────────────────┐
+  │ 🧠 内容理解                          │
+  │ - 主题：XXX                         │
+  │ - 关键观点：[展开列表]               │
+  │ - 结论：XXX                         │
+  └─────────────────────────────────────┘
+             ↓
+  ┌─────────────────────────────────────┐
+  │ ✨ 观点提炼                          │
+  │ - 传播观点：[可勾选]                 │
+  │ - 争议观点：[可勾选]                 │
+  │ - 金句：[可勾选]                     │
+  └─────────────────────────────────────┘
+             ↓
+  ┌─────────────────────────────────────┐
+  │ 🔥 爆款加工                          │
+  │ - 爆款 Hook：[编辑框]                │
+  │ - 反常识点：[编辑框]                 │
+  └─────────────────────────────────────┘
+
+  关键交互：
+  - ✅ 每层支持重跑（单独调用该步骤）
+  - ✅ 支持手动编辑中间结果
+  - ✅ 支持勾选观点进入下一步
+
+  3️⃣ 创作层（核心产出）
+
+  ┌─────────────────────────────────────┐
+  │ 🎨 领域选择                          │
+  │ ○ AI/科技  ○职场  ○副业  ○技术      │
+  └─────────────────────────────────────┘
+
+  ┌─────────────────────────────────────┐
+  │ 📤 平台选择                          │
+  │ [生成 Twitter] [生成小红书] [生成文章]│
+  └─────────────────────────────────────┘
+
+  ┌─────────────────────────────────────┐
+  │ 📝 生成结果（带复制按钮）             │
+  │ ┌─────────────────────────────────┐ │
+  │ │ Tweet 1 [📋复制] [🔄重写]       │ │
+  │ │ Tweet 2 [📋复制] [🔄重写]       │ │
+  │ │ ...                             │ │
+  │ └─────────────────────────────────┘ │
+  └─────────────────────────────────────┘
+
+  ---
+  三、技术架构
+
+  后端函数链
+
+  // 核心 API 调用链
+  transcript    // Whisper 转录
+    ↓
+  analyzeContent   // 内容理解
+    ↓
+  extractInsights  // 观点提炼
+    ↓
+  viralRewrite     // 爆款加工
+    ↓
+  generateContent  // 内容生成（多平台）
+    ↓
+  humanize         // 去 AI 味
+
+  数据缓存设计
+
+  // 中间结果全部缓存
+  {
+    taskId: "uuid",
+    transcript: "...",       // 逐字稿
+    insights: {...},         // 结构化理解
+    points: {...},           // 提炼观点
+    viralPoints: {...},      // 爆款加工
+    outputs: {               // 多平台输出
+      twitter: "...",
+      redbook: "...",
+      article: "..."
+    }
+  }
+
+  ---
+  四、Prompt 策略
+
+  分层 Prompt 设计
+
+  ┌──────────┬─────────────────┬─────────────────────┐
+  │   层级   │   Prompt 目标   │        输出         │
+  ├──────────┼─────────────────┼─────────────────────┤
+  │ 内容理解 │ 长文本→结构化   │ 主题/观点/结论      │
+  ├──────────┼─────────────────┼─────────────────────┤
+  │ 观点提炼 │ 信息→可传播观点 │ 传播点/争议点/金句  │
+  ├──────────┼─────────────────┼─────────────────────┤
+  │ 爆款加工 │ 普通→爆款       │ Hook/冲突/情绪      │
+  ├──────────┼─────────────────┼─────────────────────┤
+  │ 内容生成 │ 适配平台格式    │ Twitter/小红书/文章 │
+  ├──────────┼─────────────────┼─────────────────────┤
+  │ 去 AI 味 │ 像人写的        │ 口语化/打破对称     │
+  └──────────┴─────────────────┴─────────────────────┘
+
+  领域化 Prompt
+
+  支持同一内容切换不同领域视角：
+  - AI/科技：认知冲击风格
+  - 职场：共鸣风格
+  - 副业：结果导向风格
+  - 技术：干货风格
+
+  ---
+  五、关键指标
+
+  唯一核心指标：
+  用户是否复制内容
+
+  ┌────────────┬──────────────┐
+  │    行为    │     判断     │
+  ├────────────┼──────────────┤
+  │ 不复制     │ 内容质量不行 │
+  ├────────────┼──────────────┤
+  │ 复制但不发 │ 不够自然     │
+  ├────────────┼──────────────┤
+  │ 发了没互动 │ 不够有观点   │
+  └────────────┴──────────────┘
+
+  ---
+  六、MVP 范围
+
+  第一版只做：
+  播客/视频 → Twitter Thread
+
+  后续迭代：
+  - V2: 增加小红书
+  - V3: 增加长文章
+  - V4: 领域切换
+  - V5: Agent 自动优化
+
+  ---
+  🤔 需要确认的问题
+
+⏺ User answered Claude's questions:
+  ⎿  · 你希望先从哪个平台的内容生成开始？ → 1/2/3
+     · 输入方式希望优先支持哪种？ → YouTube/B 站链接, 音频文件上传, 小宇宙
+     · 是否需要支持中间结果手动编辑？ → 必须支持
+
+⏺ 好的，根据你的反馈，我来完善设计方案：
+
+  ---
+  📋 最终设计方案
+
+  一、支持的平台（全部）
+
+  ✅ Twitter Thread
+  ✅ 小红书
+  ✅ 微信公众号
+
+  二、输入方式
+
+  ✅ YouTube 链接 → 下载音频 → 转录
+  ✅ B 站链接 → 下载音频 → 转录
+  ✅ 小宇宙链接 → 获取音频 → 转录
+  ✅ 本地音频上传 (mp3/wav)
+
+  三、核心交互
+
+  ✅ 每层结果可编辑
+  ✅ 每层支持单独重跑
+  ✅ 支持勾选观点进入下一步
+
+  ---
+  🏗️ 具体实现方案
+
+  目录结构建议
+
+  memo-flow/
+  ├── server/
+  │   ├── pipelines/
+  │   │   ├── transcript.js       # Whisper 转录
+  │   │   ├── analyze.js          # 内容理解
+  │   │   ├── extract.js          # 观点提炼
+  │   │   ├── viral.js            # 爆款加工
+  │   │   ├── generate.js         # 内容生成
+  │   │   └── humanize.js         # 去 AI 味
+  │   ├── prompts/
+  │   │   ├── analyze.prompt.js   # 各层 Prompt 模板
+  │   │   ├── extract.prompt.js
+  │   │   ├── viral.prompt.js
+  │   │   └── generate/
+  │   │       ├── twitter.prompt.js
+  │   │       ├── redbook.prompt.js
+  │   │       └── wechat.prompt.js
+  │   └── services/
+  │       ├── downloader.js       # 音频下载
+  │       └── cache.js            # 结果缓存
+  │
+  ├── pages/
+  │   ├── input.vue              # 输入页
+  │   ├── parse.vue              # 解析页（可视化）
+  │   └── create.vue             # 创作页
+  │
+  └── components/
+      ├── PipelineViewer.vue     # Pipeline 可视化组件
+      ├── LayerEditor.vue        # 每层编辑组件
+      └── OutputCard.vue         # 输出卡片组件
+
+  ---
+  🔧 核心代码结构
+
+  Pipeline 主流程
+
+  // server/pipelines/main.js
+  export async function processContent(input, options = {}) {
+    const cache = await loadCache(options.taskId);
+
+    // Step 1: 转录（可跳过）
+    const transcript = cache.transcript || await transcribe(input.audioUrl);
+
+    // Step 2: 内容理解
+    const insights = cache.insights || await analyzeContent(transcript);
+
+    // Step 3: 观点提炼
+    const points = cache.points || await extractInsights(insights);
+
+    // Step 4: 爆款加工
+    const viralPoints = cache.viralPoints || await viralRewrite(points);
+
+    // Step 5: 内容生成（多平台）
+    const outputs = {
+      twitter: await generateTwitter(viralPoints),
+      redbook: await generateRedbook(viralPoints),
+      wechat: await generateWechat(viralPoints)
+    };
+
+    // Step 6: 去 AI 味
+    const final = await Promise.all(
+      Object.entries(outputs).map(async ([platform, content]) => ({
+        platform,
+        content: await humanize(content)
+      }))
+    );
+
+    return { transcript, insights, points, viralPoints, outputs: final };
+  }
+
+  可重跑机制
+
+  // 支持从任意节点重跑
+  export async function rerunStep(taskId, step, input) {
+    const cache = await loadCache(taskId);
+
+    const stepMap = {
+      'analyze': () => analyzeContent(cache.transcript),
+      'extract': () => extractInsights(input || cache.insights),
+      'viral': () => viralRewrite(input || cache.points),
+      'generate': () => generateContent(input || cache.viralPoints),
+      'humanize': () => humanize(input)
+    };
+
+    const result = await stepMap[step]();
+    await saveCache(taskId, { [step]: result });
+
+    return result;
+  }
+
+  ---
+  🎨 UI 设计
+
+  解析页（Pipeline 可视化）
+
+  ┌────────────────────────────────────────────────────────┐
+  │ 📥 输入源：小宇宙 - EP123 如何成为 AI 博主              │
+  ├────────────────────────────────────────────────────────┤
+  │                                                        │
+  │ ▼ Step 1: 转录完成 (12,340 字)  [📋复制] [🔄重跑]      │
+  │   ┌──────────────────────────────────────────────────┐ │
+  │   │ 欢迎收听本期节目，今天我们来聊聊...               │ │
+  │   │ [展开查看更多]                                    │ │
+  │   └──────────────────────────────────────────────────┘ │
+  │                                                        │
+  │ ▼ Step 2: 内容理解  [🔄重跑]                           │
+  │   ┌──────────────────────────────────────────────────┐ │
+  │   │ 🏷️ 主题：AI 内容创作                              │ │
+  │   │ 👥 受众：想要做自媒体的知识博主                  │ │
+  │   │ 📝 类型：经验分享                                │ │
+  │   │                                                  │ │
+  │   │ 💡 关键观点：                                    │ │
+  │   │   ☑️ AI 不是替代，是放大器                        │ │
+  │   │   ☑️ 先完成再完美                                │ │
+  │   │   ☑ 找到你的差异化定位                            │ │
+  │   └──────────────────────────────────────────────────┘ │
+  │                                                        │
+  │ ▼ Step 3: 观点提炼  [🔄重跑]                           │
+  │   ┌──────────────────────────────────────────────────┐ │
+  │   │ 📢 传播观点：                                    │ │
+  │   │   ☑ 用 AI 杠杆，一个人抵一个团队                  │ │
+  │   │   ☑ 日更不是自律，是系统                          │ │
+  │   │                                                  │ │
+  │   │ ⚡ 争议观点：                                    │ │
+  │   │   ☑ "原创"是个伪命题                             │ │
+  │   │                                                  │ │
+  │   │ 💬 金句：                                        │ │
+  │   │   ☑ 不是 AI 太强，是你太慢                        │ │
+  │   └──────────────────────────────────────────────────┘ │
+  │                                                        │
+  │ ▼ Step 4: 爆款加工  [✏️编辑] [🔄重跑]                  │
+  │   ┌──────────────────────────────────────────────────┐ │
+  │   │ 🔥 Hook: "我做 AI 自媒体的 3 个血泪教训"          │ │
+  │   │ ⚡ 冲突点：90% 的人第一步就错了                    │ │
+  │   │ 📈 情绪值：焦虑→希望                              │ │
+  │   └──────────────────────────────────────────────────┘ │
+  │                                                        │
+  └────────────────────────────────────────────────────────┘
+
+  创作页
+
+  ┌────────────────────────────────────────────────────────┐
+  │ 🎨 选择领域：                                          │
+  │  ● AI/科技  ○ 职场  ○ 副业  ○ 技术  ○ 认知            │
+  ├────────────────────────────────────────────────────────┤
+  │ 📤 生成平台：                                          │
+  │  [生成 Twitter] [生成小红书] [生成公众号]               │
+  ├────────────────────────────────────────────────────────┤
+  │                                                        │
+  │ 📝 Twitter Thread (5 条)  [📋复制全部]                  │
+  │                                                        │
+  │ ┌────────────────────────────────────────────────────┐ │
+  │ │ 1/5  [📋] [🔄]                                     │ │
+  │ │ ─────────────────────────────────────────────────  │ │
+  │ │ 我做 AI 自媒体的 3 个血泪教训🧵                     │ │
+  │ │                                                   │ │
+  │ │ 90% 的人第一步就错了...                             │ │
+  │ └────────────────────────────────────────────────────┘ │
+  │                                                        │
+  │ ┌────────────────────────────────────────────────────┐ │
+  │ │ 2/5  [📋] [🔄]                                     │ │
+  │ │ ─────────────────────────────────────────────────  │ │
+  │ │ 教训 1：不要等"准备好了"再开始                     │ │
+  │ │                                                   │ │
+  │ │ 我花了 3 个月打磨"完美"workflows...                │ │
+  │ └────────────────────────────────────────────────────┘ │
+  │                                                        │
+  └────────────────────────────────────────────────────────┘
+
+  ---
+  📊 数据流
+
+  用户操作                    后端处理
+     │                          │
+     ├─ 粘贴链接 ──────────────►│
+     │                          ├─ 下载音频
+     │                          ├─ Whisper 转录
+     │                          └─ 返回 taskId
+     │                          │
+     ├─ 轮询进度 ◄─────────────┤
+     │                          │
+     ├─ 查看逐字稿 ◄───────────┤
+     ├─ 编辑理解结果 ◄─────────┤
+     ├─ 勾选观点 ◄─────────────┤
+     │                          │
+     ├─ 点击生成 ──────────────►│
+     │                          ├─ 爆款加工
+     │                          ├─ 内容生成
+     │                          ├─ 去 AI 味
+     │                          └─ 返回最终结果
+     │                          │
+     └─ 复制内容 ◄─────────────┤
+                                │
+     └─ 点击重跑 ──────────────►│
+                                └─ 只跑指定步骤
+
+  ---
+  🚀 开发建议
+
+  Phase 1（MVP，1-2 周）
+
+  - 音频上传 + Whisper 转录
+  - 内容理解 + 观点提炼
+  - Twitter Thread 生成
+  - 基础可视化 UI
+
+  Phase 2（完善，1 周）
+
+  - 小宇宙/YouTube 链接解析
+  - 爆款加工层
+  - 去 AI 味
+  - 小红书生成
+
+  Phase 3（进阶，1 周）
+
+  - 中间结果编辑
+  - 单步重跑
+  - 领域切换
+  - 公众号生成
+
+  ---
+  💡 下一步
+
+  我现在可以帮你：
+
+  1. 搭建后端 Pipeline 框架（server/pipelines/ 各模块）
+  2. 设计 Prompt 模板（各层 Prompt 编写）
+  3. 创建前端组件（Pipeline 可视化 + 编辑器）
+  4. 先从 MVP 开始（只做 Twitter 生成）
+
+  你想从哪里开始？还是有其他想法要调整？
+
+✻ Cooked for 1m 26s
+
+❯ 需要结合现有项目来设计，我希望的是在当前项目转录详情页来做这个生成内容功能，  
+  我们现在是讨论阶段，暂时不要去动任何代码                                      
+
+⏺ 明白了，那我先了解一下现有项目的结构，特别是转录详情页的当前实现，然后我们再讨
+  论如何在这个基础上集成内容生成功能。
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+❯ 现在我们只需要内容理解 → insights.json        
+        ↓                                       
+    观点提炼 → points.json                      
+        ↓                                       
+    爆款加工 → viralPoints.json                 
+        ↓                                       
+    内容生成 → {twitter, redbook, article}.json 
+        ↓                                       
+    去 AI 味 → final.json                       
+
+⏺ 好的，让我先看看现有项目的结构，特别是转录详情页的实现：
+
+  Searched for 11 patterns, read 8 files (ctrl+o to expand)
+
+⏺ 现在我已经充分了解了现有项目的结构。让我整理一下关键信息，然后我们讨论如何在当
+  前转录详情页基础上集成内容生成功能。
+
+  ---
+  📊 现有项目结构分析
+
+  技术栈
+
+  - 前端: React + TypeScript + Vite + Tauri (桌面应用)
+  - 后端: Node.js helper 服务 (helper/server.js)
+  - UI 组件: shadcn/ui (Radix + Tailwind)
+
+  当前转录详情页结构
+
+  DesktopTranscriptionDetailPage (路由页)
+      └── TranscriptionDetail (业务组件)
+          ├── 左侧：音频信息卡片
+          └── 右侧：TranscriptionDetailTabs
+              ├── Tab 1: 转录逐字稿 (TranscriptTabPanel)
+              ├── Tab 2: 总结 (SummaryTabPanel) ← 预留中
+              └── Tab 3: 思维导图 (MindmapTabPanel)
+
+  现有 LLM 调用能力
+
+  项目已经有成熟的 LLM 调用框架（用于思维导图生成）：
+  - 支持多 Provider: openai, claude, gemini, qwen, zhipu
+  - 统一的配置管理 (/llm/config)
+  - 已有的调用模式：generateMindMapDocument
+
+  现有 API 端点
+
+  POST /transcriptions          // 新建转录
+  GET  /transcriptions/:id      // 获取转录详情
+  GET  /transcriptions/:id/live // SSE 实时更新
+  POST /transcriptions/:id/mindmap // 生成思维导图
+
+  ---
+  💡 内容生成功能集成方案
+
+  基于现有架构，我的设计思路是：
+
+  方案一：在现有详情页扩展（推荐）
+
+  在当前转录详情页直接扩展，利用现有的 SummaryTabPanel 预留位置：
+
+  Tab 1: 转录逐字稿（不变）
+  Tab 2: 内容创作（替换当前的"总结"预留面板） ← 新增功能
+  Tab 3: 思维导图（不变）
+
+  优点：
+  - 复用现有转录数据 (record.transcript)
+  - 复用 LLM 配置系统
+  - 用户流程自然：转录完成 → 切换到创作 Tab → 生成内容
+
+  ---
+  后端设计（复用现有模式）
+
+  新增 API 端点
+
+  // 内容生成主端点
+  POST /transcriptions/:id/generate
+  {
+    "provider": "openai",
+    "step": "analyze" | "extract" | "viral" | "generate",
+    "platform": "twitter" | "redbook" | "wechat",
+    "selectedPoints": ["观点 1", "观点 2"]  // 可选，用户勾选的观点
+  }
+
+  // 获取已生成的内容（带缓存）
+  GET /transcriptions/:id/generate/:step
+
+  后端 Pipeline 模块
+
+  // helper/lib/content-generator/
+  pipeline.js         // 主流程编排
+  analyze.js          // 内容理解
+  extract.js          // 观点提炼
+  viral.js            // 爆款加工
+  generate.js         // 平台内容生成
+  humanize.js         // 去 AI 味
+  prompts.js          // Prompt 模板
+
+  ---
+  前端组件设计
+
+  新增组件结构
+
+  src/components/content-creator/
+  ├── ContentCreatorTabPanel.tsx   // 创作 Tab 主面板
+  ├── PipelineViewer.tsx           // Pipeline 可视化（步骤条）
+  ├── LayerEditor.tsx              // 每层结果编辑器
+  ├── PointSelector.tsx            // 观点勾选组件
+  ├── PlatformSelector.tsx         // 平台选择（Twitter/小红书/公众号）
+  └── OutputCard.tsx               // 输出卡片（带复制/重写）
+
+  ---
+  数据流设计
+
+  转录完成 (status: completed)
+      │
+      ▼
+  用户切换到"内容创作"Tab
+      │
+      ▼
+  自动/手动触发 Step 1: 内容理解
+      │
+      ├─ 调用 POST /transcriptions/:id/generate (step: analyze)
+      ├─ 后端调用 LLM → 返回 { theme, keyPoints, conclusions }
+      ├─ 前端展示 + 支持编辑
+      │
+      ▼
+  Step 2: 观点提炼
+      │
+      ├─ 传入上一步结果
+      ├─ LLM 返回 { viralPoints, controversialPoints, quotes }
+      ├─ 前端展示 [☑] 勾选框 + 编辑框
+      │
+      ▼
+  Step 3: 爆款加工
+      │
+      ├─ 用户勾选要用的观点
+      ├─ LLM 返回 { hook, conflict, emotion }
+      │
+      ▼
+  Step 4: 平台生成
+      │
+      ├─ 用户选择平台 (Twitter/小红书/公众号)
+      ├─ LLM 返回对应格式内容
+      │
+      ▼
+  Step 5: 去 AI 味
+      │
+      └─ 最终输出 → 用户复制/发布
+
+  ---
+  数据结构设计
+
+  中间结果缓存
+
+  interface ContentGenerationCache {
+    taskId: string;  // 复用转录 id
+
+    // Step 1: 内容理解
+    insights?: {
+      theme: string;
+      audience: string;
+      contentType: string;
+      keyPoints: string[];
+      conclusions: string[];
+    };
+
+    // Step 2: 观点提炼
+    points?: {
+      viralPoints: string[];      // 传播观点
+      controversialPoints: string[]; // 争议观点
+      quotes: string[];           // 金句
+    };
+
+    // Step 3: 爆款加工
+    viralPoints?: {
+      hooks: string[];
+      conflicts: string[];
+      emotion: '焦虑' | '希望' | '愤怒' | '共鸣';
+    };
+
+    // Step 4: 平台输出
+    outputs?: {
+      twitter?: { tweets: string[] };
+      redbook?: { title: string; content: string; tags: string[] };
+      wechat?: { title: string; content: string };
+    };
+
+    // 元数据
+    updatedAt?: Date;
+  }
+
+  ---
+  🎨 UI 设计（集成到现有详情页）
+
+  Tab 2 改造后的布局
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │ 内容创作                                                    │
+  ├─────────────────────────────────────────────────────────────┤
+  │                                                             │
+  │ [Step 1: 内容理解 ✓] → [Step 2: 观点提炼 ✓] → [Step 3: 爆款加工] → [Step 4:
+  生成] │
+  │                                                             │
+  ├─────────────────────────────────────────────────────────────┤
+  │                                                             │
+  │  ┌───────────────────────────────────────────────────────┐ │
+  │  │ 📊 内容理解                                           │ │
+  │  │ ───────────────────────────────────────────────────── │ │
+  │  │ 主题：AI 自媒体的未来                                   │ │
+  │  │ 受众：知识博主、内容创作者                            │ │
+  │  │                                                       │ │
+  │  │ 关键观点：                                            │ │
+  │  │   • AI 不是替代，是放大器  [✏️编辑]                      │ │
+  │  │   • 先完成再完美            [✏️编辑]                      │ │
+  │  │   • 找到差异化定位          [✏️编辑]                      │ │
+  │  │                                                       │ │
+  │  │                  [🔄 重跑此步]  [下一步 →]              │ │
+  │  └───────────────────────────────────────────────────────┘ │
+  │                                                             │
+  └─────────────────────────────────────────────────────────────┘
+
+  ---
+  🔧 实现策略
+
+  阶段划分
+
+  ┌─────────┬─────────────────────────┬────────┐
+  │  阶段   │          功能           │ 复杂度 │
+  ├─────────┼─────────────────────────┼────────┤
+  │ Phase 1 │ 内容理解 + 观点提炼     │ 低     │
+  ├─────────┼─────────────────────────┼────────┤
+  │ Phase 2 │ 爆款加工 + Twitter 生成 │ 中     │
+  ├─────────┼─────────────────────────┼────────┤
+  │ Phase 3 │ 小红书 + 公众号生成     │ 中     │
+  ├─────────┼─────────────────────────┼────────┤
+  │ Phase 4 │ 去 AI 味 + 领域切换     │ 高     │
+  └─────────┴─────────────────────────┴────────┘
+
+  复用现有代码
+
+  // 复用思维导图的 LLM 调用模式
+  const { generateMindMapDocument } = require('./transcription/mindmap');
+
+  // 类似地创建
+  const { generateContentStep } = require('./content-generator/pipeline');
+
+  ---
+  ❓ 讨论点
+
+  1. 生成时机：
+    - 选项 A：转录完成后自动生成 Step 1（内容理解）
+    - 选项 B：用户切换到创作 Tab 后才开始生成
+  2. 缓存策略：
+    - 选项 A：每步结果存到 record.json（与 transcript 一起）
+    - 选项 B：单独的 generation_cache.json
+  3. 编辑能力：
+    - 是否允许用户编辑每一步的中间结果？（我的建议是必须支持）
+  4. 重跑粒度：
+    - 只允许重跑最后一步？
+    - 还是每步都可独立重跑？
+
+  ---
+  你觉得这个设计方案如何？有哪些地方需要调整？
+
+✻ Baked for 6m 52s
+
+❯ /cost                                                                         
+  ⎿  Total cost:            $1.08 (costs may be inaccurate due to usage of 
+     unknown models)
+     Total duration (API):  9m 3s
+     Total duration (wall): 12m 12s
+     Total code changes:    0 lines added, 0 lines removed
+     Usage by model:
+                    glm-5:  477 input, 1.2k output, 0 cache read, 0 cache write 
+     ($0.0324)
+             qwen3.5-plus:  377 input, 7.6k output, 516.9k cache read, 95.4k 
+     cache write ($1.05)
+
+❯ 内容理解，爆款加工，去AI味这些应该需要一个prompt？                            
+
+⏺ 是的，完全正确！根据 PRD 文档，这正是核心的 Prompt Pipeline 设计：
+
+  ---
+  📝 Prompt 分层设计
+
+  当前项目已有的 Prompt（思维导图）
+
+  // helper/lib/transcription/mindmap.js
+  function buildMindMapPrompt(record) {
+    return [
+      '你是一个中文思维导图整理助手。',
+      '请基于给定转录内容提炼思维导图，只返回严格 JSON...',
+      // ...
+    ].join('\n');
+  }
+
+  ---
+  需要新增的 5 层 Prompt
+
+  // helper/lib/content-generator/prompts.js
+
+  // ─────────────────────────────────────────────────────────────
+  // Step 1: 内容理解层
+  // ─────────────────────────────────────────────────────────────
+  function buildAnalyzePrompt(transcript, title) {
+    return `你是一个内容分析专家。请分析以下播客/视频转录内容，提取结构化信息。
+
+  转录标题：${title}
+
+  转录内容：
+  ${transcript}
+
+  请按以下 JSON 格式返回：
+  {
+    "theme": "用一句话概括核心主题",
+    "audience": "目标受众是谁",
+    "contentType": "内容类型（经验分享/观点输出/教学/访谈）",
+    "keyPoints": ["关键观点 1", "关键观点 2", "关键观点 3"],
+    "conclusions": ["结论 1", "结论 2"]
+  }`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Step 2: 观点提炼层
+  // ─────────────────────────────────────────────────────────────
+  function buildExtractPrompt(insights) {
+    return `你是一个观点提炼专家。请将以下结构化内容转化为可传播的观点。
+
+  内容主题：${insights.theme}
+  关键观点：${insights.keyPoints.join('\n')}
+  结论：${insights.conclusions.join('\n')}
+
+  请按以下 JSON 格式返回：
+  {
+    "viralPoints": ["易于传播的观点 1", "易于传播的观点 2"],
+    "controversialPoints": ["有争议/反常识的观点 1", "有争议/反常识的观点 2"],
+    "quotes": ["金句 1", "金句 2"]
+  }`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Step 3: 爆款加工层（核心差异 🔥）
+  // ─────────────────────────────────────────────────────────────
+  function buildViralPrompt(points) {
+    return `你是一个爆款内容专家。请将普通观点改写成具有传播力的爆款内容。
+
+  待加工观点：
+  ${points.viralPoints.join('\n')}
+  ${points.controversialPoints.join('\n')}
+
+  请按以下 JSON 格式返回：
+  {
+    "hooks": ["吸引眼球的开场 Hook 1", "吸引眼球的开场 Hook 2"],
+    "conflicts": ["制造冲突/反差的表达 1", "制造冲突/反差的表达 2"],
+    "emotion": "焦虑|希望|愤怒|共鸣",
+    "emotionLines": ["激发情绪的金句 1", "激发情绪的金句 2"]
+  }`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Step 4: 内容生成层
+  // ─────────────────────────────────────────────────────────────
+  function buildGeneratePrompt(viralPoints, platform) {
+    const platformConfig = {
+      twitter: {
+        instruction: '生成 Twitter Thread，共 5-8 条推文',
+        format: '每条推文独立，有 Hook，有信息增量',
+        length: '每条 280 字符以内',
+      },
+      redbook: {
+        instruction: '生成小红书笔记',
+        format: '标题 + 正文 + emoji + 标签',
+        length: '正文 500-800 字',
+      },
+      wechat: {
+        instruction: '生成公众号文章',
+        format: '标题 + 引言 + 正文分段 + 结尾',
+        length: '1500-2000 字',
+      },
+    };
+
+    const config = platformConfig[platform];
+
+    return `你是一个${platform}内容创作专家。${config.instruction}
+
+  爆款素材：
+  Hooks: ${viralPoints.hooks.join('\n')}
+  冲突点：${viralPoints.conflicts.join('\n')}
+  情绪：${viralPoints.emotion}
+  情绪金句：${viralPoints.emotionLines.join('\n')}
+
+  要求：
+  - ${config.format}
+  - ${config.length}
+  - 口语化表达
+  - 避免 AI 痕迹
+
+  请返回 JSON 格式。`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Step 5: 去 AI 味层
+  // ─────────────────────────────────────────────────────────────
+  function buildHumanizePrompt(content, platform) {
+    return `你是一个文字编辑专家。请优化以下内容，使其更像人写的。
+
+  原始内容：
+  ${content}
+
+  优化方向：
+  1. 打破结构对称（不要每段都一样长）
+  2. 增加口语感（用"你"而不是"用户"）
+  3. 删除 AI 痕迹（避免"总的来说"、"综上所述"）
+  4. 增加个人感（适度使用"我"、"我们"）
+  5. 调整节奏（长短句交错）
+
+  直接返回优化后的内容，不要解释。`;
+  }
+
+  ---
+  🏗️ 后端调用结构
+
+  // helper/lib/content-generator/pipeline.js
+
+  async function runContentPipeline(recordId, provider) {
+    const record = await getRecord(recordId);
+    const settings = await loadLanguageModelSettings();
+    const config = getProviderConfig(settings, provider);
+
+    // Step 1: 内容理解
+    const analyzePrompt = buildAnalyzePrompt(record.transcript, record.title);
+    const insights = await callLLM(config, analyzePrompt);
+
+    // Step 2: 观点提炼
+    const extractPrompt = buildExtractPrompt(insights);
+    const points = await callLLM(config, extractPrompt);
+
+    // Step 3: 爆款加工
+    const viralPrompt = buildViralPrompt(points);
+    const viralPoints = await callLLM(config, viralPrompt);
+
+    // Step 4: 内容生成（多平台）
+    const outputs = {};
+    for (const platform of ['twitter', 'redbook', 'wechat']) {
+      const generatePrompt = buildGeneratePrompt(viralPoints, platform);
+      outputs[platform] = await callLLM(config, generatePrompt);
+    }
+
+    // Step 5: 去 AI 味
+    const final = {};
+    for (const [platform, content] of Object.entries(outputs)) {
+      const humanizePrompt = buildHumanizePrompt(content, platform);
+      final[platform] = await callLLM(config, humanizePrompt);
+    }
+
+    return {
+      insights,
+      points,
+      viralPoints,
+      outputs: final,
+    };
+  }
+
+  ---
+  🎯 关键设计点
+
+  1. Prompt 模块化
+
+  每个 Prompt 独立函数，便于：
+  - 单独调试
+  - 单独重跑
+  - A/B 测试不同 Prompt 效果
+
+  2. 上下文传递
+
+  transcript → insights → points → viralPoints → outputs
+       ↓           ↓          ↓           ↓
+    analyze    extract     viral    generate
+
+  3. 领域化扩展（后续）
+
+  // 支持不同领域的 Prompt 变体
+  function buildViralPrompt(points, domain = 'ai') {
+    const domainConfig = {
+      ai: '强调认知冲击，用"颠覆"、"重构"等词',
+      workplace: '强调共鸣，用"你也遇到过"等表达',
+      sidehustle: '强调结果，用"我靠这个月入 X 万"等表达',
+    };
+
+    // 在 Prompt 中加入领域特定的指导
+  }
+
+  ---
+  📦 文件结构
+
+  helper/lib/content-generator/
+  ├── pipeline.js          // 主流程编排
+  ├── prompts.js           // 5 层 Prompt 模板
+  ├── generator.js         // LLM 调用（复用 mindmap.js 的模式）
+  └── index.js             // 导出接口
+
+  ---
+  总结：
+
+  ┌──────────┬────────────────┬────────────┬────────────┐
+  │   层级   │  Prompt 数量   │ 是否可编辑 │ 是否可重跑 │
+  ├──────────┼────────────────┼────────────┼────────────┤
+  │ 内容理解 │ 1 个           │ ✅         │ ✅         │
+  ├──────────┼────────────────┼────────────┼────────────┤
+  │ 观点提炼 │ 1 个           │ ✅         │ ✅         │
+  ├──────────┼────────────────┼────────────┼────────────┤
+  │ 爆款加工 │ 1 个           │ ✅         │ ✅         │
+  ├──────────┼────────────────┼────────────┼────────────┤
+  │ 内容生成 │ 3 个（按平台） │ ✅         │ ✅         │
+  ├──────────┼────────────────┼────────────┼────────────┤
+  │ 去 AI 味 │ 1 个           │ ✅         │ ✅         │
+  └──────────┴────────────────┴────────────┴────────────┘
+
+  共计约 7 个核心 Prompt，每个都是独立的函数，按需调用。
+
+  你想先从哪个 Prompt 开始设计？还是先把整个框架搭起来？
+
+✻ Churned for 1m 2s

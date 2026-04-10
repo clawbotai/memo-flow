@@ -6,12 +6,13 @@ import { Badge } from '@/components/ui/badge';
 import { CardContent, CardHeader } from '@/components/ui/card';
 import { FlowLoader } from '@/components/ui/flow-loader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TranscriptionContentGeneration } from '@/components/transcription-content-generation';
 import { TranscriptionMindMap } from '@/components/transcription-mindmap';
 import type { TranscribeSegment } from '@/types';
 import type { TranscriptionRecord } from '@/types/transcription-history';
 import { formatWhisperTimestamp } from '@/lib/utils';
 
-type DetailTabValue = 'transcript' | 'summary' | 'mindmap';
+type DetailTabValue = 'transcript' | 'content' | 'mindmap';
 
 interface TranscriptionDetailTabsProps {
   connected: boolean;
@@ -218,13 +219,11 @@ function TranscriptTabPanel({
   );
 }
 
-function SummaryTabPanel({ status }: Pick<TranscriptionDetailTabsProps, 'status'>) {
-  return (
-    <ReservedPanel
-      title="总结内容预留中"
-      description={status === 'completed' ? '后续可在这里展示本次转录的摘要、重点与关键词。' : '转录完成后可在这里展示自动总结内容。'}
-    />
-  );
+function ContentTabPanel({
+  liveRecord,
+  onRecordPatch,
+}: Pick<TranscriptionDetailTabsProps, 'liveRecord' | 'onRecordPatch'>) {
+  return <TranscriptionContentGeneration record={liveRecord} onRecordPatch={onRecordPatch} />;
 }
 
 function MindmapTabPanel({
@@ -246,7 +245,7 @@ export function TranscriptionDetailTabs(props: TranscriptionDetailTabsProps) {
       <CardHeader className="shrink-0 pb-3">
         <TabsList className="grid h-auto w-fit grid-cols-3">
           <TabsTrigger value="transcript">转录逐字稿</TabsTrigger>
-          <TabsTrigger value="summary">总结</TabsTrigger>
+          <TabsTrigger value="content">内容生成</TabsTrigger>
           <TabsTrigger value="mindmap">思维导图</TabsTrigger>
         </TabsList>
       </CardHeader>
@@ -256,8 +255,8 @@ export function TranscriptionDetailTabs(props: TranscriptionDetailTabsProps) {
           <TranscriptTabPanel {...props} />
         </TabsContent>
 
-        <TabsContent value="summary" className="mt-0 flex h-full min-h-0 flex-1 flex-col border-0 bg-transparent p-0 data-[state=inactive]:hidden">
-          <SummaryTabPanel status={props.status} />
+        <TabsContent value="content" className="mt-0 flex h-full min-h-0 flex-1 flex-col border-0 bg-transparent p-0 data-[state=inactive]:hidden">
+          <ContentTabPanel liveRecord={props.liveRecord} onRecordPatch={props.onRecordPatch} />
         </TabsContent>
 
         <TabsContent value="mindmap" className="mt-0 flex h-full min-h-0 flex-1 flex-col border-0 bg-transparent p-0 data-[state=inactive]:hidden">

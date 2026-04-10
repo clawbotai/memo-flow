@@ -41,6 +41,8 @@ const HOMEBREW_INSTALL_COMMAND =
 const PLAIN_TRANSCRIPT_FILE = '纯文本.txt';
 const TIMESTAMPED_TRANSCRIPT_FILE = '逐字稿.txt';
 const MINDMAP_FILE = '思维导图.json';
+const CONTENT_POINTS_FILE = 'content-points.json';
+const CONTENT_DRAFTS_FILE = 'content-drafts.json';
 
 module.exports = {
   APP_NAME,
@@ -67,4 +69,6 @@ module.exports = {
   PLAIN_TRANSCRIPT_FILE,
   TIMESTAMPED_TRANSCRIPT_FILE,
   MINDMAP_FILE,
+  CONTENT_POINTS_FILE,
+  CONTENT_DRAFTS_FILE,
 };
