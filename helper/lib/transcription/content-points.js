@@ -4,7 +4,7 @@ const fsp = require('fs/promises');
 const path = require('path');
 const { randomUUID } = require('crypto');
 const { CONTENT_POINTS_FILE } = require('../constants');
-const { buildPointExtractionPrompt } = require('./content-prompts');
+const { buildPointExtractionPrompt, DEFAULT_CONTENT_PLATFORM } = require('./content-prompts');
 const { requestLanguageModelText, tryParseJsonBlock } = require('./llm-provider');
 
 function getContentPointsPath(savedPath) {
@@ -69,8 +69,8 @@ function normalizePointExtractionResult(input) {
   };
 }
 
-async function extractContentPoints(record, provider) {
-  const prompt = buildPointExtractionPrompt(record);
+async function extractContentPoints(record, provider, platform = DEFAULT_CONTENT_PLATFORM) {
+  const prompt = buildPointExtractionPrompt(record, platform);
   const { text, model } = await requestLanguageModelText(provider, prompt, {
     temperatureCap: 0.5,
   });

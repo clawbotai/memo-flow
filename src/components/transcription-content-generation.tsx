@@ -294,6 +294,7 @@ export function TranscriptionContentGeneration({
     try {
       const result = await generateContentPoints(record.id, {
         provider: selectedProvider,
+        platform,
       });
       if (requestRecordIdRef.current !== record.id) {
         return;

@@ -11,6 +11,7 @@ import type {
 
 export interface GenerateContentPointsRequest {
   provider: LanguageModelProvider;
+  platform?: ContentPlatform;
 }
 
 export interface GenerateContentDraftRequest {

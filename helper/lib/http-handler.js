@@ -589,6 +589,14 @@ async function handleRequest(req, res) {
         });
         return;
       }
+      if (body.platform && body.platform !== 'redbook') {
+        sendJson(res, 400, {
+          success: false,
+          error: '当前版本仅支持小红书观点提炼',
+          code: 'UNSUPPORTED_PLATFORM',
+        });
+        return;
+      }
 
       let hadPoints = false;
       try {
@@ -603,7 +611,7 @@ async function handleRequest(req, res) {
       });
 
       try {
-        const { result } = await extractContentPoints(record, body.provider);
+        const { result } = await extractContentPoints(record, body.provider, body.platform);
         const saved = await saveContentPoints(record.savedPath, result);
         await updateRecord({
           pointExtractionStatus: 'ready',
