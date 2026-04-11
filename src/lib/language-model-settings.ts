@@ -8,13 +8,21 @@ import type {
   LanguageModelTestResult,
 } from "@/types";
 import { helperRequest } from "@/lib/local-helper-client";
+import { createDefaultLanguageModelSettings } from "@/lib/language-models";
 
 export async function fetchLanguageModelSettings(): Promise<LanguageModelSettings> {
   const response = await helperRequest<ApiResponse<LanguageModelSettings>>("/llm/config");
   if (!response.success || !response.data) {
     throw new Error(response.error || "读取语言模型设置失败");
   }
-  return response.data;
+
+  const defaults = createDefaultLanguageModelSettings();
+  return {
+    providers: {
+      ...defaults.providers,
+      ...(response.data.providers || {}),
+    },
+  };
 }
 
 export async function saveLanguageModelSettings(
@@ -30,7 +38,13 @@ export async function saveLanguageModelSettings(
     throw new Error(response.error || "保存语言模型设置失败");
   }
 
-  return response.data;
+  const defaults = createDefaultLanguageModelSettings();
+  return {
+    providers: {
+      ...defaults.providers,
+      ...(response.data.providers || {}),
+    },
+  };
 }
 
 export async function testLanguageModelConnection(

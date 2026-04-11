@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLanguageModelSettings } from "@/hooks/use-language-model-settings";
+import { createDefaultLanguageModelSettings } from "@/lib/language-models";
 import { cn } from "@/lib/utils";
 import {
   LANGUAGE_MODEL_PROVIDER_META,
@@ -29,6 +30,7 @@ import type { LanguageModelProvider, LanguageModelTestResult } from "@/types";
 const PROVIDER_ICONS: Record<LanguageModelProvider, React.ComponentType<{ className?: string }>> = {
   openai: Sparkles,
   claude: Bot,
+  "anthropic-third-party": Bot,
   gemini: Orbit,
   qwen: Zap,
   zhipu: BrainCircuit,
@@ -74,9 +76,18 @@ export function LanguageModelSettingsPanel({ visible }: LanguageModelSettingsPan
   const [providerFeedback, setProviderFeedback] = React.useState<
     Partial<Record<LanguageModelProvider, LanguageModelTestResult>>
   >({});
+  const fallbackSettings = React.useMemo(() => createDefaultLanguageModelSettings(), []);
 
-  const activeConfig = settings.providers[activeProvider];
-  const activeMeta = LANGUAGE_MODEL_PROVIDER_META[activeProvider];
+  const activeConfig =
+    settings.providers[activeProvider] ??
+    fallbackSettings.providers[activeProvider] ??
+    fallbackSettings.providers.openai;
+  const activeMeta =
+    LANGUAGE_MODEL_PROVIDER_META[activeProvider] ??
+    LANGUAGE_MODEL_PROVIDER_META.openai;
+  const ActiveIcon =
+    PROVIDER_ICONS[activeProvider] ??
+    PROVIDER_ICONS.openai;
   const activeTestResult = providerFeedback[activeProvider] || testResults[activeProvider];
   const hasSavedApiKey = activeConfig.apiKeyConfigured === true;
   const hasUsableApiKey = hasSavedApiKey || activeConfig.apiKey.trim().length > 0;
@@ -175,7 +186,7 @@ export function LanguageModelSettingsPanel({ visible }: LanguageModelSettingsPan
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
             {LANGUAGE_MODEL_PROVIDER_ORDER.map((provider) => {
               const meta = LANGUAGE_MODEL_PROVIDER_META[provider];
-              const Icon = PROVIDER_ICONS[provider];
+              const Icon = PROVIDER_ICONS[provider] ?? PROVIDER_ICONS.openai;
               const isActive = provider === activeProvider;
               const isEnabled = settings.providers[provider]?.enabled;
               const isDirty = dirtyProviders.has(provider);
@@ -226,11 +237,11 @@ export function LanguageModelSettingsPanel({ visible }: LanguageModelSettingsPan
 
         <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                {React.createElement(PROVIDER_ICONS[activeProvider], {
-                  className: "h-5 w-5 text-primary",
-                })}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  {React.createElement(ActiveIcon, {
+                    className: "h-5 w-5 text-primary",
+                  })}
                 <h4 className="text-base font-semibold">{activeMeta.label}</h4>
               </div>
               <p className="text-sm text-muted-foreground">{activeMeta.description}</p>
@@ -350,6 +361,27 @@ export function LanguageModelSettingsPanel({ visible }: LanguageModelSettingsPan
                 placeholder="https://..."
               />
             </div>
+
+            {activeProvider === "anthropic-third-party" && (
+              <div className="space-y-2">
+                <label className="text-xs font-medium">API 格式</label>
+                <select
+                  value={activeConfig.apiFormat || "openai"}
+                  onChange={(event) =>
+                    updateProviderConfig(activeProvider, {
+                      apiFormat: event.target.value as "openai" | "anthropic",
+                    })
+                  }
+                  className="flex h-10 w-full rounded-xl border border-input bg-transparent px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  <option value="openai">OpenAI-compatible</option>
+                  <option value="anthropic">Anthropic-compatible</option>
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  像 `http://127.0.0.1:8045` 这类 `/v1/chat/completions` 服务请选择 OpenAI-compatible。
+                </p>
+              </div>
+            )}
 
             <div className="grid gap-5 lg:grid-cols-2">
               <div className="space-y-2">

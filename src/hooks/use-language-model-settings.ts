@@ -86,8 +86,9 @@ export function useLanguageModelSettings() {
       setSavingProvider(provider);
 
       try {
+        const currentConfig = settings.providers[provider] ?? createDefaultLanguageModelSettings().providers[provider];
         const next = await saveLanguageModelSettings({
-          [provider]: settings.providers[provider],
+          [provider]: currentConfig,
         });
         setSettings(next);
         // dirty 状态仅在保存成功后清除，保存失败时保留，方便用户重试
@@ -108,7 +109,8 @@ export function useLanguageModelSettings() {
       setTestingProvider(provider);
 
       try {
-        const result = await testLanguageModelConnection(provider, settings.providers[provider]);
+        const currentConfig = settings.providers[provider] ?? createDefaultLanguageModelSettings().providers[provider];
+        const result = await testLanguageModelConnection(provider, currentConfig);
         setTestResults((prev) => ({
           ...prev,
           [provider]: result,

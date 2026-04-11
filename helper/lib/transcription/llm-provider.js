@@ -1,7 +1,12 @@
 'use strict';
 
 const { loadLanguageModelSettings } = require('../config');
-const { buildUrl, extractProviderErrorMessage, parseJsonSafe } = require('./llm-test');
+const {
+  buildUrl,
+  extractProviderErrorMessage,
+  parseJsonSafe,
+  requestOpenAICompatibleChatWithFallback,
+} = require('./llm-test');
 
 const DEFAULT_GENERATION_TIMEOUT_MS = 120000;
 
@@ -176,6 +181,68 @@ async function generateWithClaude(config, prompt, options) {
   return extractTextFromClaudePayload(payload);
 }
 
+async function generateWithAnthropicThirdParty(config, prompt, options) {
+  const request =
+    config.apiFormat === 'anthropic'
+      ? requestProviderJson(
+          buildUrl(config.baseUrl, '/messages'),
+          {
+            method: 'POST',
+            headers: {
+              'x-api-key': config.apiKey,
+              'anthropic-version': '2023-06-01',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: config.model,
+              max_tokens: config.maxTokens,
+              temperature: Math.min(config.temperature, options.temperatureCap),
+              system: options.systemPrompt,
+              messages: [
+                {
+                  role: 'user',
+                  content: prompt,
+                },
+              ],
+            }),
+          },
+          options.timeoutMs,
+        )
+      : requestOpenAICompatibleChatWithFallback(
+          config,
+          {
+            model: config.model,
+            messages: [
+              {
+                role: 'system',
+                content: options.systemPrompt,
+              },
+              {
+                role: 'user',
+                content: prompt,
+              },
+            ],
+            temperature: Math.min(config.temperature, options.temperatureCap),
+            max_tokens: config.maxTokens,
+          },
+          options.timeoutMs,
+        );
+  const { response, payload } = await request;
+
+  if (!response.ok) {
+    throw new Error(
+      extractProviderErrorMessage(
+        payload,
+        `Third-party API 请求失败 (HTTP ${response.status})`,
+      ),
+    );
+  }
+
+  return config.apiFormat === 'anthropic'
+    ? extractTextFromClaudePayload(payload)
+    : extractTextFromOpenAICompatiblePayload(payload);
+}
+
 async function generateWithGemini(config, prompt, options) {
   const modelPath = `/models/${encodeURIComponent(config.model)}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
   const { response, payload } = await requestProviderJson(
@@ -224,6 +291,8 @@ async function requestLanguageModelText(provider, prompt, options = {}) {
     text = await generateWithOpenAICompatible(config, prompt, resolvedOptions);
   } else if (provider === 'claude') {
     text = await generateWithClaude(config, prompt, resolvedOptions);
+  } else if (provider === 'anthropic-third-party') {
+    text = await generateWithAnthropicThirdParty(config, prompt, resolvedOptions);
   } else if (provider === 'gemini') {
     text = await generateWithGemini(config, prompt, resolvedOptions);
   } else {

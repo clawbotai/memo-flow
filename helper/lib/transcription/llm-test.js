@@ -11,6 +11,17 @@ function buildUrl(baseUrl, pathname) {
   return `${String(baseUrl || '').replace(/\/$/, '')}${pathname}`;
 }
 
+function buildOpenAICompatibleChatUrls(baseUrl) {
+  const normalizedBaseUrl = String(baseUrl || '').replace(/\/$/, '');
+  const urls = [buildUrl(normalizedBaseUrl, '/chat/completions')];
+
+  if (!/\/v\d+(?:beta\d+)?$/i.test(normalizedBaseUrl)) {
+    urls.push(buildUrl(normalizedBaseUrl, '/v1/chat/completions'));
+  }
+
+  return [...new Set(urls)];
+}
+
 async function parseJsonSafe(response) {
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('application/json')) {
@@ -47,9 +58,9 @@ function extractProviderErrorMessage(payload, fallback) {
   return fallback;
 }
 
-async function requestJson(url, init) {
+async function requestJson(url, init, timeoutMs = LLM_TEST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LLM_TEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {
@@ -61,6 +72,33 @@ async function requestJson(url, init) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function requestOpenAICompatibleChatWithFallback(config, body, timeoutMs = LLM_TEST_TIMEOUT_MS) {
+  let lastResult = null;
+
+  for (const url of buildOpenAICompatibleChatUrls(config.baseUrl)) {
+    const result = await requestJson(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+      timeoutMs,
+    );
+
+    if (result.response.status !== 404) {
+      return result;
+    }
+
+    lastResult = result;
+  }
+
+  return lastResult;
 }
 
 async function testOpenAICompatibleChat(provider, config) {
@@ -134,6 +172,59 @@ async function testClaudeConnection(config) {
     success: true,
     message: '连接测试通过',
     provider: 'claude',
+  };
+}
+
+async function testAnthropicThirdPartyConnection(config) {
+  const request =
+    config.apiFormat === 'anthropic'
+      ? requestJson(buildUrl(config.baseUrl, '/messages'), {
+          method: 'POST',
+          headers: {
+            'x-api-key': config.apiKey,
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: config.model,
+            max_tokens: config.maxTokens,
+            temperature: config.temperature,
+            messages: [
+              {
+                role: 'user',
+                content: 'Reply with OK.',
+              },
+            ],
+          }),
+        })
+      : requestOpenAICompatibleChatWithFallback(config, {
+          model: config.model,
+          messages: [
+            {
+              role: 'user',
+              content: 'Reply with OK.',
+            },
+          ],
+          temperature: config.temperature,
+          max_tokens: config.maxTokens,
+        });
+  const { response, payload } = await request;
+
+  if (!response.ok) {
+    return {
+      success: false,
+      message: extractProviderErrorMessage(
+        payload,
+        `Third-party API 连接失败 (HTTP ${response.status})`,
+      ),
+      provider: 'anthropic-third-party',
+    };
+  }
+
+  return {
+    success: true,
+    message: '连接测试通过',
+    provider: 'anthropic-third-party',
   };
 }
 
@@ -223,6 +314,10 @@ async function testLanguageModelConnection(provider, config) {
       return await testClaudeConnection(normalized);
     }
 
+    if (provider === 'anthropic-third-party') {
+      return await testAnthropicThirdPartyConnection(normalized);
+    }
+
     if (provider === 'gemini') {
       return await testGeminiConnection(normalized);
     }
@@ -243,11 +338,14 @@ async function testLanguageModelConnection(provider, config) {
 
 module.exports = {
   buildUrl,
+  buildOpenAICompatibleChatUrls,
   parseJsonSafe,
   extractProviderErrorMessage,
   requestJson,
+  requestOpenAICompatibleChatWithFallback,
   testOpenAICompatibleChat,
   testClaudeConnection,
+  testAnthropicThirdPartyConnection,
   testGeminiConnection,
   validateLanguageModelTestInput,
   testLanguageModelConnection,

@@ -27,7 +27,14 @@ const TRANSCRIPTION_PROGRESS_START = 25;
 const TRANSCRIPTION_PROGRESS_END = 95;
 const DEFAULT_QWEN_BASE_URL = 'https://dashscope.aliyuncs.com/api/v1';
 const DEFAULT_QWEN_TEST_MODEL = 'qwen-plus';
-const LANGUAGE_MODEL_PROVIDERS = ['openai', 'claude', 'gemini', 'qwen', 'zhipu'];
+const LANGUAGE_MODEL_PROVIDERS = [
+  'openai',
+  'claude',
+  'anthropic-third-party',
+  'gemini',
+  'qwen',
+  'zhipu',
+];
 const LLM_TEST_TIMEOUT_MS = 20000;
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:1420',

@@ -113,6 +113,13 @@ function normalizeProviderBoolean(input, fallback = false) {
   return fallback;
 }
 
+function normalizeProviderApiFormat(input, fallback = 'openai') {
+  if (input === 'openai' || input === 'anthropic') {
+    return input;
+  }
+  return fallback;
+}
+
 function getDefaultLanguageModelSettings() {
   return {
     providers: {
@@ -120,6 +127,7 @@ function getDefaultLanguageModelSettings() {
         apiKey: '',
         model: 'gpt-4.1-mini',
         baseUrl: 'https://api.openai.com/v1',
+        apiFormat: 'openai',
         temperature: 0.7,
         maxTokens: 4096,
         enabled: false,
@@ -128,6 +136,16 @@ function getDefaultLanguageModelSettings() {
         apiKey: '',
         model: 'claude-sonnet-4-5',
         baseUrl: 'https://api.anthropic.com/v1',
+        apiFormat: 'anthropic',
+        temperature: 0.7,
+        maxTokens: 4096,
+        enabled: false,
+      },
+      'anthropic-third-party': {
+        apiKey: '',
+        model: 'claude-sonnet-4-5',
+        baseUrl: '',
+        apiFormat: 'openai',
         temperature: 0.7,
         maxTokens: 4096,
         enabled: false,
@@ -136,6 +154,7 @@ function getDefaultLanguageModelSettings() {
         apiKey: '',
         model: 'gemini-2.5-flash',
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiFormat: 'openai',
         temperature: 0.7,
         maxTokens: 4096,
         enabled: false,
@@ -144,6 +163,7 @@ function getDefaultLanguageModelSettings() {
         apiKey: '',
         model: 'qwen-plus',
         baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        apiFormat: 'openai',
         temperature: 0.7,
         maxTokens: 4096,
         enabled: false,
@@ -152,6 +172,7 @@ function getDefaultLanguageModelSettings() {
         apiKey: '',
         model: 'glm-4.5-flash',
         baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        apiFormat: 'openai',
         temperature: 0.7,
         maxTokens: 4096,
         enabled: false,
@@ -170,6 +191,7 @@ function normalizeLanguageModelProviderConfig(config, defaults) {
     apiKey: normalizeProviderString(next.apiKey, defaults.apiKey),
     model: normalizeProviderString(next.model, defaults.model),
     baseUrl: normalizeProviderString(next.baseUrl, defaults.baseUrl).replace(/\/$/, ''),
+    apiFormat: normalizeProviderApiFormat(next.apiFormat, defaults.apiFormat),
     temperature: normalizeProviderNumber(next.temperature, defaults.temperature, 0, 2),
     maxTokens: Math.floor(
       normalizeProviderNumber(next.maxTokens, defaults.maxTokens, 1, 128000),

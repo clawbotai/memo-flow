@@ -5,13 +5,22 @@ export interface ApiResponse<T> {
   code?: string;
 }
 
-export type LanguageModelProvider = 'openai' | 'claude' | 'gemini' | 'qwen' | 'zhipu';
+export type LanguageModelProvider =
+  | 'openai'
+  | 'claude'
+  | 'anthropic-third-party'
+  | 'gemini'
+  | 'qwen'
+  | 'zhipu';
+
+export type LanguageModelApiFormat = 'openai' | 'anthropic';
 
 export interface LanguageModelProviderConfig {
   apiKey: string;
   apiKeyConfigured?: boolean;
   model: string;
   baseUrl: string;
+  apiFormat?: LanguageModelApiFormat;
   temperature: number;
   maxTokens: number;
   enabled: boolean;
