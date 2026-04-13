@@ -327,7 +327,8 @@ async function handleRequest(req, res) {
       const body = await readJsonBody(req);
       let result;
       try {
-        result = await testLanguageModelConnection(body.provider, body.config);
+        const modelId = typeof body.modelId === 'string' ? body.modelId : body?.config?.id;
+        result = await testLanguageModelConnection(body.providerId, modelId, body.config);
       } catch (error) {
         sendJson(res, 400, {
           success: false,
@@ -464,7 +465,7 @@ async function handleRequest(req, res) {
         sendJson(res, 400, { success: false, error: '当前转录缺少保存目录，无法生成思维导图' });
         return;
       }
-      if (!body.provider) {
+      if (!body.providerId) {
         sendJson(res, 400, { success: false, error: '未指定语言模型 Provider' });
         return;
       }
@@ -478,7 +479,11 @@ async function handleRequest(req, res) {
       });
 
       try {
-        const { document, generator } = await generateMindMapDocument(record, body.provider);
+        const { document, generator } = await generateMindMapDocument(
+          record,
+          body.providerId,
+          body.modelId,
+        );
         const saved = await writeMindMapDocument(record.savedPath, document);
         await updateRecord({
           mindmapStatus: 'ready',
@@ -581,7 +586,7 @@ async function handleRequest(req, res) {
         sendJson(res, 400, { success: false, error: '当前转录缺少保存目录，无法提炼观点' });
         return;
       }
-      if (!body.provider) {
+      if (!body.providerId) {
         sendJson(res, 400, {
           success: false,
           error: '未指定语言模型 Provider',
@@ -611,7 +616,12 @@ async function handleRequest(req, res) {
       });
 
       try {
-        const { result } = await extractContentPoints(record, body.provider, body.platform);
+        const { result } = await extractContentPoints(
+          record,
+          body.providerId,
+          body.modelId,
+          body.platform,
+        );
         const saved = await saveContentPoints(record.savedPath, result);
         await updateRecord({
           pointExtractionStatus: 'ready',
@@ -684,7 +694,7 @@ async function handleRequest(req, res) {
         sendJson(res, 400, { success: false, error: '当前转录缺少保存目录，无法生成内容' });
         return;
       }
-      if (!body.provider) {
+      if (!body.providerId) {
         sendJson(res, 400, {
           success: false,
           error: '未指定语言模型 Provider',
@@ -749,7 +759,8 @@ async function handleRequest(req, res) {
           record,
           selectedPoints,
           body.platform,
-          body.provider,
+          body.providerId,
+          body.modelId,
           existingDraft,
         );
         const saved = await saveContentDraft(record.savedPath, draft);

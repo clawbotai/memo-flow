@@ -1,13 +1,15 @@
-import type { LanguageModelProvider } from "@/types";
 import type { MindMapDocument } from "@/types/mindmap";
 import type { TranscriptionRecord } from "@/types/transcription-history";
 
 export type ToastType = "success" | "error" | "info";
 
 export interface ProviderOption {
-  provider: LanguageModelProvider;
+  providerId: string;
+  providerName: string;
+  modelId: string;
   label: string;
   model: string;
+  value: string;
 }
 
 export interface SelectedNodeInfo {

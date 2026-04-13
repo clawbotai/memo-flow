@@ -1,6 +1,6 @@
 'use strict';
 
-const { loadLanguageModelSettings } = require('../config');
+const { getLanguageModelProviderCard, loadLanguageModelSettings } = require('../config');
 const {
   buildUrl,
   extractProviderErrorMessage,
@@ -95,18 +95,38 @@ async function requestProviderJson(url, init, timeoutMs = DEFAULT_GENERATION_TIM
   }
 }
 
-function getProviderConfig(settings, provider) {
-  const config = settings.providers?.[provider];
-  if (!config) {
+/**
+ * 获取运行时完整配置（Provider 连接信息 + 模型参数）
+ */
+function getProviderConfig(settings, providerId, modelId) {
+  const providerSettings = getLanguageModelProviderCard(settings, providerId);
+  if (!providerSettings) {
     throw new Error('未找到指定的语言模型配置');
   }
-  if (!config.enabled) {
-    throw new Error('该语言模型 Provider 未启用');
+  const modelConfig =
+    providerSettings.models?.find((item) => item.id === modelId)
+    || providerSettings.models?.find((item) => item.id === providerSettings.selectedModelId)
+    || providerSettings.models?.[0];
+  if (!modelConfig) {
+    throw new Error('未找到指定的模型配置');
   }
-  if (!String(config.apiKey || '').trim()) {
-    throw new Error('该语言模型 Provider 缺少 API Key');
+  if (!modelConfig.enabled) {
+    throw new Error('该模型未启用');
   }
-  return config;
+  if (!String(providerSettings.apiKey || '').trim()) {
+    throw new Error('该模型缺少 API Key');
+  }
+  // 合并 Provider 连接信息与模型参数
+  return {
+    ...modelConfig,
+    providerId: providerSettings.id,
+    providerName: providerSettings.name,
+    kind: providerSettings.kind,
+    presetType: providerSettings.presetType,
+    apiKey: providerSettings.apiKey,
+    baseUrl: providerSettings.baseUrl,
+    apiFormat: providerSettings.apiFormat,
+  };
 }
 
 async function generateWithOpenAICompatible(config, prompt, options) {
@@ -277,23 +297,23 @@ async function generateWithGemini(config, prompt, options) {
   return extractTextFromGeminiPayload(payload);
 }
 
-async function requestLanguageModelText(provider, prompt, options = {}) {
+async function requestLanguageModelText(providerId, modelId, prompt, options = {}) {
   const resolvedOptions = {
     systemPrompt: options.systemPrompt || 'You output strict JSON only.',
     temperatureCap: typeof options.temperatureCap === 'number' ? options.temperatureCap : 0.6,
     timeoutMs: typeof options.timeoutMs === 'number' ? options.timeoutMs : DEFAULT_GENERATION_TIMEOUT_MS,
   };
   const settings = await loadLanguageModelSettings();
-  const config = getProviderConfig(settings, provider);
+  const config = getProviderConfig(settings, providerId, modelId);
 
   let text = '';
-  if (provider === 'openai' || provider === 'qwen' || provider === 'zhipu') {
+  if (config.kind === 'custom' || config.presetType === 'openai' || config.presetType === 'qwen' || config.presetType === 'zhipu') {
     text = await generateWithOpenAICompatible(config, prompt, resolvedOptions);
-  } else if (provider === 'claude') {
+  } else if (config.presetType === 'claude') {
     text = await generateWithClaude(config, prompt, resolvedOptions);
-  } else if (provider === 'anthropic-third-party') {
+  } else if (config.presetType === 'anthropic-third-party') {
     text = await generateWithAnthropicThirdParty(config, prompt, resolvedOptions);
-  } else if (provider === 'gemini') {
+  } else if (config.presetType === 'gemini') {
     text = await generateWithGemini(config, prompt, resolvedOptions);
   } else {
     throw new Error('不支持的语言模型 Provider');
@@ -305,6 +325,9 @@ async function requestLanguageModelText(provider, prompt, options = {}) {
 
   return {
     text,
+    providerId: config.providerId,
+    providerName: config.providerName,
+    modelId: config.id,
     model: config.model,
   };
 }

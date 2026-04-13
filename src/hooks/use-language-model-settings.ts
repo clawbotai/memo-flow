@@ -2,17 +2,27 @@
 
 import * as React from "react";
 import type {
-  LanguageModelProvider,
-  LanguageModelProviderConfig,
+  LanguageModelModelConfig,
+  LanguageModelProviderCard,
   LanguageModelSettings,
   LanguageModelTestResult,
 } from "@/types";
-import { createDefaultLanguageModelSettings } from "@/lib/language-models";
+import {
+  createCustomLanguageModelProviderCard,
+  createDefaultLanguageModelSettings,
+  createLanguageModelModelConfig,
+  getLanguageModelProviderCardById,
+} from "@/lib/language-models";
 import {
   fetchLanguageModelSettings,
   saveLanguageModelSettings,
   testLanguageModelConnection,
 } from "@/lib/language-model-settings";
+import { writeCachedLanguageModelSettings } from "@/lib/language-model-settings-cache";
+
+function getModelResultKey(providerId: string, modelId: string) {
+  return `${providerId}:${modelId}`;
+}
 
 export function useLanguageModelSettings() {
   const [settings, setSettings] = React.useState<LanguageModelSettings>(
@@ -20,13 +30,12 @@ export function useLanguageModelSettings() {
   );
   const [loaded, setLoaded] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
-  const [savingProvider, setSavingProvider] = React.useState<LanguageModelProvider | null>(null);
-  const [testingProvider, setTestingProvider] = React.useState<LanguageModelProvider | null>(null);
+  const [savingProviderId, setSavingProviderId] = React.useState<string | null>(null);
+  const [testingModelKey, setTestingModelKey] = React.useState<string | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
-  const [dirtyProviders, setDirtyProviders] = React.useState<Set<LanguageModelProvider>>(new Set());
-  const [testResults, setTestResults] = React.useState<
-    Partial<Record<LanguageModelProvider, LanguageModelTestResult>>
-  >({});
+  const [dirtyProviderIds, setDirtyProviderIds] = React.useState<Set<string>>(new Set());
+  const [testResults, setTestResults] = React.useState<Record<string, LanguageModelTestResult>>({});
+  const settingsRef = React.useRef(settings);
 
   const loadSettings = React.useCallback(async () => {
     setLoading(true);
@@ -35,7 +44,8 @@ export function useLanguageModelSettings() {
     try {
       const next = await fetchLanguageModelSettings();
       setSettings(next);
-      setDirtyProviders(new Set());
+      settingsRef.current = next;
+      setDirtyProviderIds(new Set());
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "读取语言模型设置失败");
     } finally {
@@ -44,83 +54,224 @@ export function useLanguageModelSettings() {
     }
   }, []);
 
-  // 不在 mount 时自动加载——由调用方（Panel）根据 visible 状态按需触发 reload()，
-  // 避免设置对话框未打开时就发出网络请求。
+  const clearProviderTestResults = React.useCallback((providerId: string) => {
+    setTestResults((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((key) => {
+        if (key.startsWith(`${providerId}:`)) {
+          delete next[key];
+        }
+      });
+      return next;
+    });
+  }, []);
+
+  const markProviderDirty = React.useCallback((providerId: string) => {
+    setDirtyProviderIds((prev) => {
+      const next = new Set(prev);
+      next.add(providerId);
+      return next;
+    });
+    clearProviderTestResults(providerId);
+  }, [clearProviderTestResults]);
+
+  const updateProviderCard = React.useCallback(
+    (
+      providerId: string,
+      updater: (current: LanguageModelProviderCard) => LanguageModelProviderCard,
+    ) => {
+      setSettings((prev) => {
+        const nextProviders = prev.providers.map((provider) =>
+          provider.id === providerId ? updater(provider) : provider,
+        );
+        const next = { providers: nextProviders };
+        settingsRef.current = next;
+        return next;
+      });
+      markProviderDirty(providerId);
+    },
+    [markProviderDirty],
+  );
+
+  const addProvider = React.useCallback(() => {
+    const nextProvider = createCustomLanguageModelProviderCard();
+    setSettings((prev) => {
+      const next = {
+        providers: [...prev.providers, nextProvider],
+      };
+      settingsRef.current = next;
+      return next;
+    });
+    markProviderDirty(nextProvider.id);
+    return nextProvider.id;
+  }, [markProviderDirty]);
+
+  const removeProvider = React.useCallback((providerId: string) => {
+    setSettings((prev) => {
+      const next = {
+        providers: prev.providers.filter((provider) => provider.id !== providerId),
+      };
+      settingsRef.current = next;
+      return next;
+    });
+    setDirtyProviderIds((prev) => {
+      const next = new Set(prev);
+      next.delete(providerId);
+      return next;
+    });
+    clearProviderTestResults(providerId);
+  }, [clearProviderTestResults]);
+
+  const updateProviderConnection = React.useCallback(
+    (
+      providerId: string,
+      updates: Partial<Pick<LanguageModelProviderCard, "apiKey" | "apiKeyConfigured" | "baseUrl" | "name">>,
+    ) => {
+      updateProviderCard(providerId, (current) => ({
+        ...current,
+        ...updates,
+      }));
+    },
+    [updateProviderCard],
+  );
 
   const updateProviderConfig = React.useCallback(
     (
-      provider: LanguageModelProvider,
-      updates: Partial<LanguageModelProviderConfig>,
+      providerId: string,
+      modelId: string,
+      updates: Partial<LanguageModelModelConfig>,
     ) => {
-      setSettings((prev) => ({
-        providers: {
-          ...prev.providers,
-          [provider]: {
-            ...prev.providers[provider],
-            ...updates,
-          },
-        },
+      updateProviderCard(providerId, (current) => ({
+        ...current,
+        models: current.models.map((item) => {
+          if (item.id !== modelId) {
+            return item;
+          }
+          const nextModel = { ...item, ...updates };
+          if (
+            Object.prototype.hasOwnProperty.call(updates, "model")
+            && !Object.prototype.hasOwnProperty.call(updates, "name")
+            && (!item.name || item.name === item.model)
+          ) {
+            nextModel.name = String(updates.model || item.name).trim() || item.name;
+          }
+          return nextModel;
+        }),
       }));
+    },
+    [updateProviderCard],
+  );
 
-      setDirtyProviders((prev) => {
-        const next = new Set(prev);
-        next.add(provider);
-        return next;
+  const setSelectedProviderModel = React.useCallback(
+    (providerId: string, modelId: string) => {
+      updateProviderCard(providerId, (current) => ({
+        ...current,
+        selectedModelId: modelId,
+      }));
+    },
+    [updateProviderCard],
+  );
+
+  const addProviderModel = React.useCallback(
+    (providerId: string) => {
+      const provider = getLanguageModelProviderCardById(settingsRef.current, providerId);
+      const nextModel = createLanguageModelModelConfig(provider?.presetType, {
+        name: "New Model",
+        model: "",
       });
+      updateProviderCard(providerId, (current) => ({
+        ...current,
+        selectedModelId: nextModel.id,
+        models: [...current.models, nextModel],
+      }));
+      return nextModel.id;
+    },
+    [updateProviderCard],
+  );
 
-      setTestResults((prev) => {
-        if (!prev[provider]) {
-          return prev;
+  const removeProviderModel = React.useCallback(
+    (providerId: string, modelId: string) => {
+      updateProviderCard(providerId, (current) => {
+        if (current.models.length <= 1) {
+          return current;
         }
+
+        const models = current.models.filter((item) => item.id !== modelId);
         return {
-          ...prev,
-          [provider]: undefined,
+          ...current,
+          selectedModelId:
+            current.selectedModelId === modelId ? models[0]?.id || current.selectedModelId : current.selectedModelId,
+          models,
         };
       });
+    },
+    [updateProviderCard],
+  );
+
+  const saveProviderConfig = React.useCallback(
+    async (providerId: string) => {
+      setSavingProviderId(providerId);
+
+      try {
+        const submittedSettings = settingsRef.current;
+        const next = await saveLanguageModelSettings(submittedSettings.providers);
+        setSettings(next);
+        settingsRef.current = next;
+        writeCachedLanguageModelSettings(next);
+        setDirtyProviderIds(new Set());
+      } finally {
+        setSavingProviderId(null);
+      }
     },
     [],
   );
 
-  const saveProviderConfig = React.useCallback(
-    async (provider: LanguageModelProvider) => {
-      setSavingProvider(provider);
-
-      try {
-        const currentConfig = settings.providers[provider] ?? createDefaultLanguageModelSettings().providers[provider];
-        const next = await saveLanguageModelSettings({
-          [provider]: currentConfig,
-        });
-        setSettings(next);
-        // dirty 状态仅在保存成功后清除，保存失败时保留，方便用户重试
-        setDirtyProviders((prev) => {
-          const updated = new Set(prev);
-          updated.delete(provider);
-          return updated;
-        });
-      } finally {
-        setSavingProvider(null);
-      }
-    },
-    [settings.providers],
-  );
-
   const testProviderConfig = React.useCallback(
-    async (provider: LanguageModelProvider) => {
-      setTestingProvider(provider);
+    async (providerId: string, modelId: string) => {
+      const modelKey = getModelResultKey(providerId, modelId);
+      setTestingModelKey(modelKey);
 
       try {
-        const currentConfig = settings.providers[provider] ?? createDefaultLanguageModelSettings().providers[provider];
-        const result = await testLanguageModelConnection(provider, currentConfig);
+        const provider = getLanguageModelProviderCardById(settingsRef.current, providerId);
+        if (!provider) {
+          throw new Error("未找到指定的 Provider");
+        }
+        const currentModelConfig =
+          provider.models.find((item) => item.id === modelId)
+          ?? provider.models[0]
+          ?? createLanguageModelModelConfig(provider.presetType, { id: modelId });
+
+        const result = await testLanguageModelConnection(
+          providerId,
+          modelId,
+          currentModelConfig,
+          {
+            apiKey: provider.apiKey,
+            apiKeyConfigured: provider.apiKeyConfigured,
+            baseUrl: provider.baseUrl,
+            apiFormat: provider.apiFormat,
+            name: provider.name,
+            presetType: provider.presetType,
+            kind: provider.kind,
+          },
+        );
+
         setTestResults((prev) => ({
           ...prev,
-          [provider]: result,
+          [modelKey]: result,
         }));
+
         return result;
       } finally {
-        setTestingProvider(null);
+        setTestingModelKey(null);
       }
     },
-    [settings.providers],
+    [],
+  );
+
+  const getTestResult = React.useCallback(
+    (providerId: string, modelId: string) => testResults[getModelResultKey(providerId, modelId)],
+    [testResults],
   );
 
   return {
@@ -128,13 +279,19 @@ export function useLanguageModelSettings() {
     loaded,
     loading,
     loadError,
-    savingProvider,
-    testingProvider,
-    dirtyProviders,
-    testResults,
+    savingProviderId,
+    testingModelKey,
+    dirtyProviderIds,
     reload: loadSettings,
+    addProvider,
+    removeProvider,
+    updateProviderConnection,
     updateProviderConfig,
+    setSelectedProviderModel,
+    addProviderModel,
+    removeProviderModel,
     saveProviderConfig,
     testProviderConfig,
+    getTestResult,
   };
 }

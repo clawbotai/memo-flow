@@ -14,26 +14,54 @@ export type LanguageModelProvider =
   | 'zhipu';
 
 export type LanguageModelApiFormat = 'openai' | 'anthropic';
+export type LanguageModelProviderKind = 'preset' | 'custom';
 
-export interface LanguageModelProviderConfig {
-  apiKey: string;
-  apiKeyConfigured?: boolean;
+/** 模型独有配置（不含连接信息） */
+export interface LanguageModelModelConfig {
+  id: string;
+  name: string;
   model: string;
-  baseUrl: string;
-  apiFormat?: LanguageModelApiFormat;
   temperature: number;
   maxTokens: number;
   enabled: boolean;
 }
 
+/** Provider 卡片（共享连接信息 + 模型列表） */
+export interface LanguageModelProviderCard {
+  id: string;
+  kind: LanguageModelProviderKind;
+  presetType?: LanguageModelProvider;
+  name: string;
+  apiKey: string;
+  apiKeyConfigured?: boolean;
+  baseUrl: string;
+  apiFormat: LanguageModelApiFormat;
+  selectedModelId: string;
+  models: LanguageModelModelConfig[];
+}
+
+/** 运行时合并后的完整配置（连接信息 + 模型参数），供 LLM 调用层使用 */
+export type LanguageModelProviderConfig = LanguageModelModelConfig & {
+  providerId: string;
+  providerName: string;
+  kind: LanguageModelProviderKind;
+  presetType?: LanguageModelProvider;
+  apiKey: string;
+  apiKeyConfigured?: boolean;
+  baseUrl: string;
+  apiFormat: LanguageModelApiFormat;
+}
+
 export interface LanguageModelSettings {
-  providers: Record<LanguageModelProvider, LanguageModelProviderConfig>;
+  providers: LanguageModelProviderCard[];
 }
 
 export interface LanguageModelTestResult {
   success: boolean;
   message: string;
-  provider: LanguageModelProvider;
+  providerId: string;
+  providerName?: string;
+  modelId?: string;
 }
 
 export interface WhisperConfig {

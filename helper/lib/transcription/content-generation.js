@@ -92,13 +92,13 @@ function normalizeDraftCollection(input) {
   };
 }
 
-async function generatePlatformContent(record, selectedPoints, platform, provider, existingDraft) {
+async function generatePlatformContent(record, selectedPoints, platform, providerId, modelId, existingDraft) {
   if (platform !== 'redbook') {
     throw new Error('Phase 1 暂不支持该平台');
   }
 
   const prompt = buildRedbookPrompt(record, selectedPoints);
-  const { text, model } = await requestLanguageModelText(provider, prompt, {
+  const { text, model, modelId: resolvedModelId, providerName } = await requestLanguageModelText(providerId, modelId, prompt, {
     temperatureCap: 0.8,
   });
 
@@ -114,7 +114,9 @@ async function generatePlatformContent(record, selectedPoints, platform, provide
   return {
     draft,
     generator: {
-      provider,
+      providerId,
+      providerName,
+      modelId: resolvedModelId,
       model,
     },
   };

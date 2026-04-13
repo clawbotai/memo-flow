@@ -1,11 +1,7 @@
 'use strict';
 
-const { LANGUAGE_MODEL_PROVIDERS, LLM_TEST_TIMEOUT_MS } = require('../constants');
-const {
-  loadLanguageModelSettings,
-  normalizeLanguageModelProviderConfig,
-  mergeLanguageModelProviderConfig,
-} = require('../config');
+const { LLM_TEST_TIMEOUT_MS } = require('../constants');
+const { getLanguageModelProviderCard, loadLanguageModelSettings } = require('../config');
 
 function buildUrl(baseUrl, pathname) {
   return `${String(baseUrl || '').replace(/\/$/, '')}${pathname}`;
@@ -128,14 +124,17 @@ async function testOpenAICompatibleChat(provider, config) {
         payload,
         `${provider} 连接失败 (HTTP ${response.status})`,
       ),
-      provider,
+      providerId: config.providerId,
+      providerName: config.providerName,
     };
   }
 
   return {
     success: true,
     message: '连接测试通过',
-    provider,
+    providerId: config.providerId,
+    providerName: config.providerName,
+    modelId: config.id,
   };
 }
 
@@ -164,14 +163,17 @@ async function testClaudeConnection(config) {
     return {
       success: false,
       message: extractProviderErrorMessage(payload, `Claude 连接失败 (HTTP ${response.status})`),
-      provider: 'claude',
+      providerId: config.providerId,
+      providerName: config.providerName,
     };
   }
 
   return {
     success: true,
     message: '连接测试通过',
-    provider: 'claude',
+    providerId: config.providerId,
+    providerName: config.providerName,
+    modelId: config.id,
   };
 }
 
@@ -217,14 +219,17 @@ async function testAnthropicThirdPartyConnection(config) {
         payload,
         `Third-party API 连接失败 (HTTP ${response.status})`,
       ),
-      provider: 'anthropic-third-party',
+      providerId: config.providerId,
+      providerName: config.providerName,
     };
   }
 
   return {
     success: true,
     message: '连接测试通过',
-    provider: 'anthropic-third-party',
+    providerId: config.providerId,
+    providerName: config.providerName,
+    modelId: config.id,
   };
 }
 
@@ -253,20 +258,23 @@ async function testGeminiConnection(config) {
     return {
       success: false,
       message: extractProviderErrorMessage(payload, `Gemini 连接失败 (HTTP ${response.status})`),
-      provider: 'gemini',
+      providerId: config.providerId,
+      providerName: config.providerName,
     };
   }
 
   return {
     success: true,
     message: '连接测试通过',
-    provider: 'gemini',
+    providerId: config.providerId,
+    providerName: config.providerName,
+    modelId: config.id,
   };
 }
 
-function validateLanguageModelTestInput(provider, config) {
-  if (!LANGUAGE_MODEL_PROVIDERS.includes(provider)) {
-    throw new Error('不支持的语言模型 Provider');
+function validateLanguageModelTestInput(providerId, config) {
+  if (!String(providerId || '').trim()) {
+    throw new Error('未指定语言模型 Provider');
   }
   if (!String(config?.apiKey || '').trim() && config?.apiKeyConfigured !== true) {
     throw new Error('API Key 不能为空');
@@ -279,59 +287,116 @@ function validateLanguageModelTestInput(provider, config) {
   }
 }
 
-async function testLanguageModelConnection(provider, config) {
-  validateLanguageModelTestInput(provider, config);
+/**
+ * 构建运行时完整配置（Provider 连接信息 + 模型参数）
+ */
+function resolveProviderConfig(providerSettings, modelConfig) {
+  return {
+    ...modelConfig,
+    providerId: providerSettings.id,
+    providerName: providerSettings.name,
+    kind: providerSettings.kind,
+    presetType: providerSettings.presetType,
+    apiKey: providerSettings.apiKey,
+    baseUrl: providerSettings.baseUrl,
+    apiFormat: providerSettings.apiFormat,
+  };
+}
+
+async function testLanguageModelConnection(provider, modelId, clientConfig) {
+  const providerId = String(provider || '').trim();
+  validateLanguageModelTestInput(providerId, clientConfig);
 
   const currentSettings = await loadLanguageModelSettings();
-  const mergedConfig = mergeLanguageModelProviderConfig(
-    currentSettings.providers[provider],
-    config,
-    {
-      apiKey: '',
-      model: '',
-      baseUrl: '',
-      temperature: 0.7,
-      maxTokens: 4096,
-      enabled: false,
-    },
-  );
+  const providerSettings = getLanguageModelProviderCard(currentSettings, providerId);
+  if (!providerSettings) {
+    return {
+      success: false,
+      message: '未找到该 Provider 的配置',
+      providerId,
+    };
+  }
 
-  const normalized = normalizeLanguageModelProviderConfig(mergedConfig, {
-    apiKey: '',
-    model: '',
-    baseUrl: '',
-    temperature: 0.7,
-    maxTokens: 4096,
-    enabled: false,
-  });
+  // 从当前配置中找到对应的模型
+  const currentModel =
+    providerSettings.models?.find((item) => item.id === modelId)
+    || providerSettings.models?.find((item) => item.id === providerSettings.selectedModelId)
+    || providerSettings.models?.[0];
+
+  // 合并客户端传入的配置（测试表单中的值）与持久化的模型配置
+  const mergedModelConfig = {
+    ...currentModel,
+    ...clientConfig,
+    id: clientConfig?.id || modelId,
+    model: clientConfig?.model || currentModel?.model,
+    name: clientConfig?.name || currentModel?.name,
+  };
+
+  const rawApiKey = typeof clientConfig?.apiKey === 'string' ? clientConfig.apiKey.trim() : '';
+  const shouldClearApiKey =
+    Object.prototype.hasOwnProperty.call(clientConfig || {}, 'apiKeyConfigured')
+    && clientConfig.apiKeyConfigured === false
+    && !rawApiKey;
+  const runtimeProviderSettings = {
+    ...providerSettings,
+    apiKey: rawApiKey
+      ? rawApiKey
+      : shouldClearApiKey
+        ? ''
+        : providerSettings.apiKey,
+    apiKeyConfigured:
+      typeof clientConfig?.apiKeyConfigured === 'boolean'
+        ? clientConfig.apiKeyConfigured
+        : providerSettings.apiKeyConfigured,
+    baseUrl:
+      typeof clientConfig?.baseUrl === 'string'
+        ? clientConfig.baseUrl.replace(/\/$/, '')
+        : providerSettings.baseUrl,
+    apiFormat:
+      clientConfig?.apiFormat === 'openai' || clientConfig?.apiFormat === 'anthropic'
+        ? clientConfig.apiFormat
+        : providerSettings.apiFormat,
+  };
+
+  // 构建运行时完整配置
+  const runtimeConfig = resolveProviderConfig(runtimeProviderSettings, mergedModelConfig);
 
   try {
-    if (provider === 'openai' || provider === 'qwen' || provider === 'zhipu') {
-      return await testOpenAICompatibleChat(provider, normalized);
+    if (runtimeConfig.kind === 'custom' || runtimeConfig.presetType === 'openai' || runtimeConfig.presetType === 'qwen' || runtimeConfig.presetType === 'zhipu') {
+      const providerLabel = runtimeConfig.providerName || runtimeConfig.presetType || 'Provider';
+      return await testOpenAICompatibleChat(providerLabel, runtimeConfig);
     }
 
-    if (provider === 'claude') {
-      return await testClaudeConnection(normalized);
+    if (runtimeConfig.presetType === 'claude') {
+      return await testClaudeConnection(runtimeConfig);
     }
 
-    if (provider === 'anthropic-third-party') {
-      return await testAnthropicThirdPartyConnection(normalized);
+    if (runtimeConfig.presetType === 'anthropic-third-party') {
+      return await testAnthropicThirdPartyConnection(runtimeConfig);
     }
 
-    if (provider === 'gemini') {
-      return await testGeminiConnection(normalized);
+    if (runtimeConfig.presetType === 'gemini') {
+      return await testGeminiConnection(runtimeConfig);
     }
 
     throw new Error('不支持的语言模型 Provider');
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      return { success: false, message: '连接超时', provider };
+      return {
+        success: false,
+        message: '连接超时',
+        providerId: runtimeConfig.providerId,
+        providerName: runtimeConfig.providerName,
+        modelId: runtimeConfig.id,
+      };
     }
 
     return {
       success: false,
       message: error instanceof Error ? error.message : '连接测试失败',
-      provider,
+      providerId: runtimeConfig.providerId,
+      providerName: runtimeConfig.providerName,
+      modelId: runtimeConfig.id,
     };
   }
 }

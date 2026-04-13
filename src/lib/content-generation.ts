@@ -5,17 +5,18 @@ import type {
   ApiResponse,
   ContentDraftCollection,
   ContentPlatform,
-  LanguageModelProvider,
   PointExtractionResult,
 } from '@/types';
 
 export interface GenerateContentPointsRequest {
-  provider: LanguageModelProvider;
+  providerId: string;
+  modelId: string;
   platform?: ContentPlatform;
 }
 
 export interface GenerateContentDraftRequest {
-  provider: LanguageModelProvider;
+  providerId: string;
+  modelId: string;
   platform: ContentPlatform;
   selectedPointIds: string[];
 }

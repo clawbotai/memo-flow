@@ -1,5 +1,8 @@
 import type {
+  LanguageModelApiFormat,
+  LanguageModelModelConfig,
   LanguageModelProvider,
+  LanguageModelProviderCard,
   LanguageModelProviderConfig,
   LanguageModelSettings,
 } from "@/types";
@@ -11,6 +14,25 @@ export interface LanguageModelProviderMeta {
   apiKeyPlaceholder: string;
   modelSuggestions: string[];
 }
+
+export interface LanguageModelOption {
+  providerId: string;
+  providerName: string;
+  modelId: string;
+  label: string;
+  model: string;
+  value: string;
+}
+
+type LegacyProviderSettings = {
+  apiKey?: string;
+  apiKeyConfigured?: boolean;
+  baseUrl?: string;
+  apiFormat?: LanguageModelApiFormat;
+  selectedModelId?: string;
+  models?: Partial<LanguageModelModelConfig>[];
+  model?: string;
+};
 
 export const LANGUAGE_MODEL_PROVIDER_ORDER: LanguageModelProvider[] = [
   "openai",
@@ -39,7 +61,7 @@ export const LANGUAGE_MODEL_PROVIDER_META: Record<LanguageModelProvider, Languag
   "anthropic-third-party": {
     id: "anthropic-third-party",
     label: "Third-party API",
-    description: "自定义第三方模型服务，支持 OpenAI-compatible 与 Anthropic-compatible。",
+    description: "第三方预置 Provider，保持项目现有 OpenAI-compatible 连接方式。",
     apiKeyPlaceholder: "填写第三方 API Key",
     modelSuggestions: ["claude-sonnet-4-5", "claude-opus-4-1", "claude-3-7-sonnet-latest"],
   },
@@ -66,83 +88,369 @@ export const LANGUAGE_MODEL_PROVIDER_META: Record<LanguageModelProvider, Languag
   },
 };
 
-export const DEFAULT_LANGUAGE_MODEL_PROVIDER_CONFIGS: Record<
+export const DEFAULT_LANGUAGE_MODEL_PROVIDER_CONNECTION: Record<
   LanguageModelProvider,
-  LanguageModelProviderConfig
+  { apiKey: string; baseUrl: string; apiFormat: LanguageModelApiFormat }
 > = {
   openai: {
     apiKey: "",
-    apiKeyConfigured: false,
-    model: "gpt-4.1-mini",
     baseUrl: "https://api.openai.com/v1",
     apiFormat: "openai",
+  },
+  claude: {
+    apiKey: "",
+    baseUrl: "https://api.anthropic.com/v1",
+    apiFormat: "anthropic",
+  },
+  "anthropic-third-party": {
+    apiKey: "",
+    baseUrl: "",
+    apiFormat: "openai",
+  },
+  gemini: {
+    apiKey: "",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    apiFormat: "openai",
+  },
+  qwen: {
+    apiKey: "",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    apiFormat: "openai",
+  },
+  zhipu: {
+    apiKey: "",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    apiFormat: "openai",
+  },
+};
+
+export const DEFAULT_LANGUAGE_MODEL_PROVIDER_CONFIGS: Record<
+  LanguageModelProvider,
+  Omit<LanguageModelModelConfig, "id" | "name">
+> = {
+  openai: {
+    model: "gpt-4.1-mini",
     temperature: 0.7,
     maxTokens: 4096,
     enabled: false,
   },
   claude: {
-    apiKey: "",
-    apiKeyConfigured: false,
     model: "claude-sonnet-4-5",
-    baseUrl: "https://api.anthropic.com/v1",
-    apiFormat: "anthropic",
     temperature: 0.7,
     maxTokens: 4096,
     enabled: false,
   },
   "anthropic-third-party": {
-    apiKey: "",
-    apiKeyConfigured: false,
     model: "claude-sonnet-4-5",
-    baseUrl: "",
-    apiFormat: "openai",
     temperature: 0.7,
     maxTokens: 4096,
     enabled: false,
   },
   gemini: {
-    apiKey: "",
-    apiKeyConfigured: false,
     model: "gemini-2.5-flash",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    apiFormat: "openai",
     temperature: 0.7,
     maxTokens: 4096,
     enabled: false,
   },
   qwen: {
-    apiKey: "",
-    apiKeyConfigured: false,
     model: "qwen-plus",
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    apiFormat: "openai",
     temperature: 0.7,
     maxTokens: 4096,
     enabled: false,
   },
   zhipu: {
-    apiKey: "",
-    apiKeyConfigured: false,
     model: "glm-4.5-flash",
-    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-    apiFormat: "openai",
     temperature: 0.7,
     maxTokens: 4096,
     enabled: false,
   },
 };
 
+function randomId(prefix: string) {
+  const randomPart =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `${prefix}-${randomPart}`;
+}
+
+function normalizeString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value.trim() || fallback : fallback;
+}
+
+function normalizeNumber(value: unknown, fallback: number, min: number, max: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function normalizeBoolean(value: unknown, fallback = false) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  return fallback;
+}
+
+function isPresetProvider(value: unknown): value is LanguageModelProvider {
+  return typeof value === "string" && LANGUAGE_MODEL_PROVIDER_ORDER.includes(value as LanguageModelProvider);
+}
+
+function getDefaultsProvider(presetType?: LanguageModelProvider): LanguageModelProvider {
+  return presetType && isPresetProvider(presetType) ? presetType : "openai";
+}
+
+export function createLanguageModelConfigId(providerId = "provider") {
+  return randomId(providerId);
+}
+
+export function createLanguageModelProviderCardId(kind: "preset" | "custom", presetType?: LanguageModelProvider) {
+  if (kind === "preset" && presetType) {
+    return `preset:${presetType}`;
+  }
+  return randomId("provider");
+}
+
+export function getProviderName(provider: Pick<LanguageModelProviderCard, "name" | "presetType">) {
+  if (provider.name.trim()) {
+    return provider.name.trim();
+  }
+  if (provider.presetType) {
+    return LANGUAGE_MODEL_PROVIDER_META[provider.presetType].label;
+  }
+  return "Untitled Provider";
+}
+
+export function getProviderApiKeyPlaceholder(provider: Pick<LanguageModelProviderCard, "presetType" | "kind">) {
+  if (provider.presetType) {
+    return LANGUAGE_MODEL_PROVIDER_META[provider.presetType].apiKeyPlaceholder;
+  }
+  return "sk-...";
+}
+
+export function getProviderModelSuggestions(provider: Pick<LanguageModelProviderCard, "presetType">) {
+  if (!provider.presetType) {
+    return LANGUAGE_MODEL_PROVIDER_META.openai.modelSuggestions;
+  }
+  return LANGUAGE_MODEL_PROVIDER_META[provider.presetType].modelSuggestions;
+}
+
+export function createLanguageModelModelConfig(
+  provider: LanguageModelProvider | undefined,
+  overrides: Partial<LanguageModelModelConfig> = {},
+): LanguageModelModelConfig {
+  const defaultsProvider = getDefaultsProvider(provider);
+  const defaults = DEFAULT_LANGUAGE_MODEL_PROVIDER_CONFIGS[defaultsProvider];
+  const model = normalizeString(overrides.model, defaults.model);
+
+  return {
+    id: normalizeString(overrides.id, createLanguageModelConfigId(defaultsProvider)),
+    name: normalizeString(overrides.name, model),
+    model,
+    temperature: normalizeNumber(overrides.temperature, defaults.temperature, 0, 2),
+    maxTokens: Math.floor(normalizeNumber(overrides.maxTokens, defaults.maxTokens, 1, 128000)),
+    enabled:
+      typeof overrides.enabled === "boolean"
+        ? overrides.enabled
+        : defaults.enabled,
+  };
+}
+
+export const createLanguageModelProviderConfig = createLanguageModelModelConfig;
+
+export function createDefaultLanguageModelProviderCard(
+  presetType: LanguageModelProvider,
+): LanguageModelProviderCard {
+  const conn = DEFAULT_LANGUAGE_MODEL_PROVIDER_CONNECTION[presetType];
+  const meta = LANGUAGE_MODEL_PROVIDER_META[presetType];
+  const defaultModel = createLanguageModelModelConfig(presetType);
+  return {
+    id: createLanguageModelProviderCardId("preset", presetType),
+    kind: "preset",
+    presetType,
+    name: meta.label,
+    apiKey: conn.apiKey,
+    baseUrl: conn.baseUrl,
+    apiFormat: conn.apiFormat,
+    selectedModelId: defaultModel.id,
+    models: [defaultModel],
+  };
+}
+
+export function createCustomLanguageModelProviderCard(): LanguageModelProviderCard {
+  const defaultModel = createLanguageModelModelConfig(undefined, {
+    name: "Default Model",
+    model: "",
+  });
+  return {
+    id: createLanguageModelProviderCardId("custom"),
+    kind: "custom",
+    name: "Untitled Provider",
+    apiKey: "",
+    baseUrl: "",
+    apiFormat: "openai",
+    selectedModelId: defaultModel.id,
+    models: [defaultModel],
+  };
+}
+
+function normalizeLanguageModelProviderCard(
+  source: Partial<LanguageModelProviderCard> | LegacyProviderSettings | Record<string, unknown> | undefined,
+  fallbackPresetType?: LanguageModelProvider,
+): LanguageModelProviderCard {
+  const defaultsProvider = getDefaultsProvider(fallbackPresetType);
+  const src = source && typeof source === "object" ? source : {};
+  const presetType = isPresetProvider((src as LanguageModelProviderCard).presetType)
+    ? (src as LanguageModelProviderCard).presetType
+    : fallbackPresetType;
+  const kind: LanguageModelProviderCard["kind"] =
+    presetType || (src as LanguageModelProviderCard).kind === "preset"
+      ? "preset"
+      : "custom";
+  const defaults = kind === "preset" && presetType
+    ? createDefaultLanguageModelProviderCard(presetType)
+    : createCustomLanguageModelProviderCard();
+  const legacyFlat = !Array.isArray((src as LegacyProviderSettings).models)
+    && typeof (src as LegacyProviderSettings).model === "string";
+  const legacyFirstModel = legacyFlat
+    ? src
+    : (Array.isArray((src as LegacyProviderSettings).models)
+      ? (src as LegacyProviderSettings).models?.[0]
+      : undefined) || {};
+  const sourceModels = Array.isArray((src as LegacyProviderSettings).models)
+    ? (src as LegacyProviderSettings).models || []
+    : legacyFlat
+      ? [src as Partial<LanguageModelModelConfig>]
+      : [];
+  const models = sourceModels.length > 0
+    ? sourceModels.map((item) => createLanguageModelModelConfig(presetType, item))
+    : defaults.models;
+  const selectedModelId = normalizeString(
+    (src as LegacyProviderSettings).selectedModelId,
+    models[0]?.id || defaults.selectedModelId,
+  );
+  const baseUrl = normalizeString(
+    (src as LegacyProviderSettings).baseUrl,
+    normalizeString((legacyFirstModel as LegacyProviderSettings)?.baseUrl, defaults.baseUrl),
+  ).replace(/\/$/, "");
+  const apiKey = normalizeString(
+    (src as LegacyProviderSettings).apiKey,
+    normalizeString((legacyFirstModel as LegacyProviderSettings)?.apiKey, defaults.apiKey),
+  );
+  const apiKeyConfigured =
+    typeof (src as LegacyProviderSettings).apiKeyConfigured === "boolean"
+      ? (src as LegacyProviderSettings).apiKeyConfigured
+      : typeof (legacyFirstModel as LegacyProviderSettings)?.apiKeyConfigured === "boolean"
+        ? (legacyFirstModel as LegacyProviderSettings).apiKeyConfigured
+        : undefined;
+
+  return {
+    id: normalizeString(
+      (src as LanguageModelProviderCard).id,
+      kind === "preset" && presetType
+        ? createLanguageModelProviderCardId("preset", presetType)
+        : createLanguageModelProviderCardId("custom"),
+    ),
+    kind,
+    ...(presetType ? { presetType } : {}),
+    name: normalizeString(
+      (src as LanguageModelProviderCard).name,
+      defaults.name,
+    ),
+    apiKey,
+    ...(apiKeyConfigured !== undefined ? { apiKeyConfigured } : {}),
+    baseUrl,
+    apiFormat: defaults.apiFormat,
+    selectedModelId:
+      selectedModelId && models.some((item) => item.id === selectedModelId)
+        ? selectedModelId
+        : models[0]?.id || defaults.selectedModelId,
+    models,
+  };
+}
+
 export function createDefaultLanguageModelSettings(): LanguageModelSettings {
   return {
-    providers: {
-      openai: { ...DEFAULT_LANGUAGE_MODEL_PROVIDER_CONFIGS.openai },
-      claude: { ...DEFAULT_LANGUAGE_MODEL_PROVIDER_CONFIGS.claude },
-      "anthropic-third-party": {
-        ...DEFAULT_LANGUAGE_MODEL_PROVIDER_CONFIGS["anthropic-third-party"],
-      },
-      gemini: { ...DEFAULT_LANGUAGE_MODEL_PROVIDER_CONFIGS.gemini },
-      qwen: { ...DEFAULT_LANGUAGE_MODEL_PROVIDER_CONFIGS.qwen },
-      zhipu: { ...DEFAULT_LANGUAGE_MODEL_PROVIDER_CONFIGS.zhipu },
-    },
+    providers: LANGUAGE_MODEL_PROVIDER_ORDER.map((provider) =>
+      createDefaultLanguageModelProviderCard(provider),
+    ),
+  };
+}
+
+export function normalizeLanguageModelSettings(
+  settings?: Partial<LanguageModelSettings> | { providers?: Record<string, LegacyProviderSettings> },
+): LanguageModelSettings {
+  const sourceProviders = Array.isArray(settings?.providers) ? settings.providers : [];
+  const legacyProviders =
+    !Array.isArray(settings?.providers) && settings?.providers && typeof settings.providers === "object"
+      ? settings.providers
+      : {};
+
+  const presets = LANGUAGE_MODEL_PROVIDER_ORDER.map((presetType) => {
+    const arrayMatch = sourceProviders.find((item) => item?.presetType === presetType);
+    const legacyMatch = legacyProviders[presetType];
+    return normalizeLanguageModelProviderCard(arrayMatch ?? legacyMatch, presetType);
+  });
+
+  const customs = sourceProviders
+    .filter((item) => item && item.kind === "custom")
+    .map((item) => normalizeLanguageModelProviderCard(item))
+    .filter((item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index);
+
+  return {
+    providers: presets.concat(customs).map((provider, index, list) => {
+      if (provider.kind === "custom" && list.some((item, candidateIndex) => candidateIndex < index && item.id === provider.id)) {
+        return {
+          ...provider,
+          id: createLanguageModelProviderCardId("custom"),
+        };
+      }
+      return provider;
+    }),
+  };
+}
+
+export function getLanguageModelProviderCardById(
+  settings: LanguageModelSettings,
+  providerId: string,
+): LanguageModelProviderCard | undefined {
+  return settings.providers.find((provider) => provider.id === providerId);
+}
+
+export function getEnabledLanguageModelOptions(settings: LanguageModelSettings): LanguageModelOption[] {
+  return settings.providers.flatMap((provider) => {
+    const providerName = getProviderName(provider);
+    const apiKeyConfigured = Boolean(provider.apiKeyConfigured ?? provider.apiKey);
+    if (!apiKeyConfigured) {
+      return [];
+    }
+    return provider.models
+      .filter((model) => model.enabled)
+      .map((model) => ({
+        providerId: provider.id,
+        providerName,
+        modelId: model.id,
+        label: `${providerName} · ${model.name || model.model}`,
+        model: model.model,
+        value: `${provider.id}:${model.id}`,
+      }));
+  });
+}
+
+export function resolveProviderConfig(
+  providerSettings: LanguageModelProviderCard,
+  modelConfig: LanguageModelModelConfig,
+): LanguageModelProviderConfig {
+  return {
+    ...modelConfig,
+    providerId: providerSettings.id,
+    providerName: getProviderName(providerSettings),
+    kind: providerSettings.kind,
+    presetType: providerSettings.presetType,
+    apiKey: providerSettings.apiKey,
+    apiKeyConfigured: providerSettings.apiKeyConfigured,
+    baseUrl: providerSettings.baseUrl,
+    apiFormat: providerSettings.apiFormat,
   };
 }

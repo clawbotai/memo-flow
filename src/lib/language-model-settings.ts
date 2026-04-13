@@ -2,13 +2,18 @@
 
 import type {
   ApiResponse,
-  LanguageModelProvider,
-  LanguageModelProviderConfig,
+  LanguageModelModelConfig,
+  LanguageModelProviderCard,
   LanguageModelSettings,
   LanguageModelTestResult,
 } from "@/types";
 import { helperRequest } from "@/lib/local-helper-client";
-import { createDefaultLanguageModelSettings } from "@/lib/language-models";
+import { normalizeLanguageModelSettings } from "@/lib/language-models";
+import {
+  mergeCachedLanguageModelSettings,
+  readCachedLanguageModelSettings,
+  writeCachedLanguageModelSettings,
+} from "@/lib/language-model-settings-cache";
 
 export async function fetchLanguageModelSettings(): Promise<LanguageModelSettings> {
   const response = await helperRequest<ApiResponse<LanguageModelSettings>>("/llm/config");
@@ -16,17 +21,17 @@ export async function fetchLanguageModelSettings(): Promise<LanguageModelSetting
     throw new Error(response.error || "读取语言模型设置失败");
   }
 
-  const defaults = createDefaultLanguageModelSettings();
-  return {
-    providers: {
-      ...defaults.providers,
-      ...(response.data.providers || {}),
-    },
-  };
+  const remoteSettings = normalizeLanguageModelSettings(response.data);
+  const mergedSettings = mergeCachedLanguageModelSettings(
+    remoteSettings,
+    readCachedLanguageModelSettings(),
+  );
+  writeCachedLanguageModelSettings(mergedSettings);
+  return mergedSettings;
 }
 
 export async function saveLanguageModelSettings(
-  providers: Partial<Record<LanguageModelProvider, Partial<LanguageModelProviderConfig>>>,
+  providers: LanguageModelProviderCard[],
 ): Promise<LanguageModelSettings> {
   const response = await helperRequest<ApiResponse<LanguageModelSettings>>("/llm/config", {
     method: "PUT",
@@ -38,23 +43,21 @@ export async function saveLanguageModelSettings(
     throw new Error(response.error || "保存语言模型设置失败");
   }
 
-  const defaults = createDefaultLanguageModelSettings();
-  return {
-    providers: {
-      ...defaults.providers,
-      ...(response.data.providers || {}),
-    },
-  };
+  const nextSettings = normalizeLanguageModelSettings(response.data);
+  writeCachedLanguageModelSettings(nextSettings);
+  return nextSettings;
 }
 
 export async function testLanguageModelConnection(
-  provider: LanguageModelProvider,
-  config: LanguageModelProviderConfig,
+  providerId: string,
+  modelId: string,
+  modelConfig: LanguageModelModelConfig,
+  connection: Pick<LanguageModelProviderCard, "apiKey" | "apiKeyConfigured" | "baseUrl" | "apiFormat" | "name" | "presetType" | "kind">,
 ): Promise<LanguageModelTestResult> {
   const response = await helperRequest<ApiResponse<LanguageModelTestResult>>("/llm/test", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider, config }),
+    body: JSON.stringify({ providerId, modelId, config: { ...modelConfig, ...connection } }),
   });
 
   if (!response.success || !response.data) {

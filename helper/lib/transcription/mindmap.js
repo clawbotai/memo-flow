@@ -110,9 +110,9 @@ function buildMindMapPrompt(record) {
   ].join('\n');
 }
 
-async function generateMindMapDocument(record, provider) {
+async function generateMindMapDocument(record, providerId, modelId) {
   const prompt = buildMindMapPrompt(record);
-  const { text: rawText, model } = await requestLanguageModelText(provider, prompt, {
+  const { text: rawText, model, modelId: resolvedModelId, providerName } = await requestLanguageModelText(providerId, modelId, prompt, {
     timeoutMs: MINDMAP_TIMEOUT_MS,
     temperatureCap: 0.6,
   });
@@ -126,7 +126,9 @@ async function generateMindMapDocument(record, provider) {
   return {
     document,
     generator: {
-      provider,
+      providerId,
+      providerName,
+      modelId: resolvedModelId,
       model,
     },
   };

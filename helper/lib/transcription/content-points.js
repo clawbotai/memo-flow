@@ -69,9 +69,9 @@ function normalizePointExtractionResult(input) {
   };
 }
 
-async function extractContentPoints(record, provider, platform = DEFAULT_CONTENT_PLATFORM) {
+async function extractContentPoints(record, providerId, modelId, platform = DEFAULT_CONTENT_PLATFORM) {
   const prompt = buildPointExtractionPrompt(record, platform);
-  const { text, model } = await requestLanguageModelText(provider, prompt, {
+  const { text, model, modelId: resolvedModelId, providerName } = await requestLanguageModelText(providerId, modelId, prompt, {
     temperatureCap: 0.5,
   });
 
@@ -79,7 +79,9 @@ async function extractContentPoints(record, provider, platform = DEFAULT_CONTENT
   return {
     result: normalizePointExtractionResult(parsed),
     generator: {
-      provider,
+      providerId,
+      providerName,
+      modelId: resolvedModelId,
       model,
     },
   };

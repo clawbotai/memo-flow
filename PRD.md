@@ -726,38 +726,42 @@ const CONTENT_DRAFTS_FILE = 'content-drafts.json';
 
 ### 18.1 前端功能
 
-| 功能 | 说明 | 优先级 |
-|------|------|--------|
-| 内容生成 Tab | 替换现有"总结"预留页签 | P0 |
-| 模型选择器 | 复用现有 LLM Provider 选择 | P0 |
-| 平台选择器 | Twitter / 小红书切换 | P0 |
-| 观点提炼按钮 | 触发观点生成 | P0 |
-| 观点分类展示 | 主题 / 传播观点 / 争议观点 / 金句 | P0 |
-| 观点勾选组件 | Checkbox + 来源片段展示 | P0 |
-| 生成内容按钮 | 触发平台内容生成 | P0 |
-| 结果卡片展示 | Twitter Thread / 小红书文案 | P0 |
-| 复制功能 | 一键复制全部内容 | P0 |
-| 编辑与保存功能 | Textarea 编辑 + 保存 | P0 |
-| 重写功能 | 基于相同观点重新生成 | P1 |
-| 错误态与空状态 | 引导用户操作 | P0 |
-| 过期状态提示 | 观点变化后标记旧内容为 stale | P1 |
-| 观点数量提示 | <2 条或>8 条时的引导提示 | P2 |
+| 功能 | 说明 | 优先级 | 状态 |
+|------|------|--------|------|
+| 内容生成 Tab | 替换现有"总结"预留页签 | P0 | 已完成 |
+| 模型选择器 | 复用现有 LLM Provider 选择 | P0 | 已完成 |
+| 平台选择器 | 小红书平台选择 | P0 | 已完成 |
+| 观点提炼按钮 | 触发观点生成 | P0 | 已完成 |
+| 观点分类展示 | 主题 / 传播观点 / 争议观点 / 金句 | P0 | 已完成 |
+| 观点勾选组件 | Checkbox + 来源片段展示 | P0 | 已完成 |
+| 生成内容按钮 | 触发平台内容生成 | P0 | 已完成 |
+| 结果卡片展示 | 小红书文案（标题 + 正文 + 标签） | P0 | 已完成 |
+| 复制功能 | 一键复制全部内容 | P0 | 已完成 |
+| 错误态与空状态 | 引导用户操作 | P0 | 已完成 |
+| 编辑与保存功能 | Textarea 编辑 + 保存 | P0 | 未开始 |
+| 重写功能 | 基于相同观点重新生成 | P1 | 未开始 |
+| 过期状态提示 | 观点变化后标记旧内容为 stale | P1 | 未开始 |
+| 观点数量提示 | <2 条或>8 条时的引导提示 | P2 | 未开始 |
+| 平台选择器扩展 | 支持 Twitter/X 切换 | P3 | 未开始 |
+| Twitter 结果卡片 | Thread 展示 + 复制 | P3 | 未开始 |
 
 ### 18.2 Helper 功能
 
-| 功能 | 说明 | 优先级 |
-|------|------|--------|
-| `POST /transcriptions/:id/content-points/generate` | 观点提炼接口 | P0 |
-| `GET /transcriptions/:id/content-points` | 获取观点接口 | P0 |
-| `POST /transcriptions/:id/content/generate` | 内容生成接口 | P0 |
-| `GET /transcriptions/:id/content` | 获取内容接口 | P0 |
-| `POST /transcriptions/:id/content/save` | 保存内容接口 | P0 |
-| `POST /transcriptions/:id/content/regenerate` | 重写内容接口 | P1 |
-| 本地 JSON 持久化 | content-points.json / content-drafts.json | P0 |
-| 状态字段更新 | 更新转录记录的状态字段 | P0 |
-| Prompt 模板管理 | 集中管理 Prompt 模板 | P0 |
-| 长文本处理 | 截断策略 + 提示 | P0 |
-| JSON 自动提取 | 从非结构化响应中提取 JSON | P1 |
+| 功能 | 说明 | 优先级 | 状态 |
+|------|------|--------|------|
+| `POST /transcriptions/:id/content-points/generate` | 观点提炼接口 | P0 | 已完成 |
+| `GET /transcriptions/:id/content-points` | 获取观点接口 | P0 | 已完成 |
+| `POST /transcriptions/:id/content/generate` | 内容生成接口（小红书） | P0 | 已完成 |
+| `GET /transcriptions/:id/content` | 获取内容接口 | P0 | 已完成 |
+| 本地 JSON 持久化 | content-points.json / content-drafts.json | P0 | 已完成 |
+| 状态字段更新 | 更新转录记录的状态字段 | P0 | 已完成 |
+| Prompt 模板管理 | 集中管理 Prompt 模板（含平台差异化） | P0 | 已完成 |
+| 长文本处理 | 截断策略（18000 字）+ Prompt 截断提示 | P0 | 已完成 |
+| JSON 自动提取 | 从非结构化响应中提取 JSON | P1 | 已完成 |
+| `POST /transcriptions/:id/content/save` | 保存用户编辑内容接口 | P0 | 未开始 |
+| `POST /transcriptions/:id/content/regenerate` | 重写内容接口 | P1 | 未开始 |
+| `POST /transcriptions/:id/content/generate` (twitter) | Twitter 内容生成接口 | P3 | 未开始 |
+| Twitter 生成 Prompt | `buildTwitterPrompt` 模板 | P3 | 未开始 |
 
 ### 18.3 数据与类型
 
@@ -869,72 +873,79 @@ V1 完成后，应满足以下验收条件：
 
 ## 20. 里程碑建议
 
-### Phase 1（基础框架 + 小红书，预计 4-5 天）
+### Phase 1（基础框架 + 小红书） — 已完成
 
-| 任务 | 负责人 | 产出 |
-|------|--------|------|
-| 前端：内容生成 Tab 基础结构 | 前端 | 可切换的 Tab 页面 |
-| Helper：观点提炼接口 | 后端 | `POST /content-points/generate` |
-| Helper：获取观点接口 | 后端 | `GET /content-points` |
-| 前端：观点提炼 UI | 前端 | 观点列表展示 + 勾选 |
-| 前端：平台选择器 | 前端 | 小红书平台选择 |
-| Helper：小红书生成接口 | 后端 | `POST /content/generate` (redbook) |
-| 前端：小红书结果卡片 | 前端 | 标题 + 正文 + 标签展示 + 复制 |
-| Helper：保存/获取草稿接口 | 后端 | `GET/POST /content` |
-| Prompt：观点提炼模板 | 产品 | 完成并测试 |
-| Prompt：小红书生成模板 | 产品 | 完成并测试 |
+| 任务 | 产出 | 状态 |
+|------|------|------|
+| 前端：内容生成 Tab 基础结构 | 可切换的 Tab 页面 | 已完成 |
+| Helper：观点提炼接口 | `POST /content-points/generate` | 已完成 |
+| Helper：获取观点接口 | `GET /content-points` | 已完成 |
+| 前端：观点提炼 UI | 观点列表展示 + 勾选 | 已完成 |
+| 前端：平台选择器 | 小红书平台选择 | 已完成 |
+| Helper：小红书生成接口 | `POST /content/generate` (redbook) | 已完成 |
+| 前端：小红书结果卡片 | 标题 + 正文 + 标签展示 + 复制 | 已完成 |
+| Helper：保存/获取草稿接口 | `GET/POST /content` | 已完成 |
+| Prompt：观点提炼模板 | 含平台差异化 Profile 的 Prompt | 已完成 |
+| Prompt：小红书生成模板 | 含爆款写作规则的 Prompt | 已完成 |
+| Helper：长文本截断策略 | 18000 字截断 + Prompt 截断提示 | 已完成 |
+| Helper：JSON 自动提取 | 从非结构化响应中提取 JSON 块 | 已完成 |
+| 前端：错误态与空状态 | 引导用户操作、Provider 未配置提示 | 已完成 |
+| 本地 JSON 持久化 | content-points.json / content-drafts.json | 已完成 |
+| 状态字段更新 | pointExtractionStatus / contentGenerationStatus | 已完成 |
 
-**Phase 1 验收：**
-- 用户可切换到内容生成 Tab
-- 用户可点击"提炼观点"并看到结果
-- 用户可勾选观点生成小红书文案
-- 生成结果可复制
-- 观点和内容结果持久化保存
+**Phase 1 验收结果：全部通过**
+- [x] 用户可切换到内容生成 Tab
+- [x] 用户可点击"提炼观点"并看到结果
+- [x] 用户可勾选观点生成小红书文案
+- [x] 生成结果可复制
+- [x] 观点和内容结果持久化保存
 
 ---
 
-### Phase 2（Twitter 生成 + 编辑，预计 3-4 天）
+### Phase 2（编辑 + 重写 + 完善，预计 3-4 天） — 进行中
 
-| 任务 | 负责人 | 产出 |
-|------|--------|------|
-| 前端：平台选择器扩展 | 前端 | 支持 Twitter 切换 |
-| Helper：Twitter 生成接口 | 后端 | `POST /content/generate` (twitter) |
-| 前端：Twitter 结果卡片 | 前端 | Thread 展示 + 复制 |
-| Prompt：Twitter 生成模板 | 产品 | 完成并测试 |
-| 前端：编辑功能 | 前端 | Textarea 编辑 |
-| Helper：保存编辑内容接口 | 后端 | `POST /content/save` |
-| 前端：过期状态提示 | 前端 | stale 状态 UI |
+| 任务 | 产出 | 状态 |
+|------|------|------|
+| 前端：编辑功能 | Textarea 编辑状态切换 | 未开始 |
+| Helper：保存编辑内容接口 | `POST /content/save` | 未开始 |
+| 前端：重写功能 | 点击重写生成新版本 | 未开始 |
+| Helper：重写接口 | `POST /content/regenerate` | 未开始 |
+| 前端：过期状态提示 | 观点变化后 stale 状态 UI | 未开始 |
+| 前端：边界情况处理 | 观点数量 <2 或 >8 时的引导提示 | 未开始 |
+| 整体：验收测试 | 完成验收清单 | 未开始 |
 
 **Phase 2 验收：**
-- 用户可生成 Twitter Thread
-- 用户可编辑并保存内容（小红书/Twitter）
+- 用户可编辑并保存小红书内容
+- 已手动编辑的结果不可被自动生成静默覆盖
+- 用户可基于相同观点重写内容
 - 观点变化后旧内容标记为过期
+- 观点勾选过少/过多时有引导提示
+- 通过全部 P0/P1 验收测试
 
 ---
 
-### Phase 3（完善 + 测试，预计 2-3 天）
+### Phase 3（Twitter/X 生成，预计 2-3 天） — 未开始，优先级最低
 
-| 任务 | 负责人 | 产出 |
-|------|--------|------|
-| 前端：重写功能 | 前端 | 点击重写生成新版本 |
-| Helper：重写接口 | 后端 | `POST /content/regenerate` |
-| 前端：错误态处理 | 前端 | 各种错误场景 UI |
-| Helper：长文本处理 | 后端 | 截断策略 + 提示 |
-| 前端：边界情况处理 | 前端 | 观点数量提示等 |
-| 整体：验收测试 | 测试 | 完成验收清单 |
+| 任务 | 产出 | 状态 |
+|------|------|------|
+| 前端：平台选择器扩展 | 支持 Twitter/X 切换 | 未开始 |
+| Helper：Twitter 生成接口 | `POST /content/generate` (twitter) | 未开始 |
+| Prompt：Twitter 生成模板 | `buildTwitterPrompt` 模板 | 未开始 |
+| 前端：Twitter 结果卡片 | Thread 展示 + 复制 | 未开始 |
 
 **Phase 3 验收：**
-- 所有 P0/P1 功能完成
-- 通过全部验收测试
-- 无明显 Bug
+- 用户可选择 Twitter/X 平台并生成 Thread
+- 生成 4-8 条推文，第 1 条有 Hook
+- 用户可编辑、保存、重写 Twitter 内容
 
 ---
 
 ### 总体排期
 
 ```
-Week 1: Phase 1 + Phase 2（基础框架 + Twitter 生成）
-Week 2: Phase 3 + Phase 4（小红书 + 编辑 + 测试）
+Phase 1: 基础框架 + 小红书          — 已完成
+Phase 2: 编辑 + 重写 + 完善         — 预计 3-4 天
+Phase 3: Twitter/X 生成（最低优先级）— 预计 2-3 天，视需求排期
 ```
 
-**预计总工期：8-12 个工作日**
+**剩余工期：5-7 个工作日**

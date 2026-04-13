@@ -6,11 +6,7 @@ import {
   generateTranscriptionMindMap,
 } from "@/lib/mindmap";
 import { fetchLanguageModelSettings } from "@/lib/language-model-settings";
-import {
-  LANGUAGE_MODEL_PROVIDER_META,
-  LANGUAGE_MODEL_PROVIDER_ORDER,
-} from "@/lib/language-models";
-import type { LanguageModelProvider } from "@/types";
+import { getEnabledLanguageModelOptions } from "@/lib/language-models";
 import type { MindMapDocument } from "@/types/mindmap";
 import { buildMindMapPath, serializeOutline, type ProviderOption, type ToastType, type TranscriptionMindMapProps } from "./shared";
 import { useMindMapOverlay } from "./use-mindmap-overlay";
@@ -21,7 +17,7 @@ export function useTranscriptionMindMap({ record, onRecordPatch }: Transcription
 
   const [mindMapDocument, setMindMapDocument] = useState<MindMapDocument | null>(null);
   const [providers, setProviders] = useState<ProviderOption[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState<LanguageModelProvider | "">("");
+  const [selectedProvider, setSelectedProvider] = useState("");
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [loadingDocument, setLoadingDocument] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -30,7 +26,8 @@ export function useTranscriptionMindMap({ record, onRecordPatch }: Transcription
 
   const isCompleted = record.status === "completed";
   const hasMindMap = Boolean(mindMapDocument);
-  const canGenerate = isCompleted && providers.length > 0 && Boolean(selectedProvider) && !generating;
+  const selectedProviderOption = providers.find((item) => item.value === selectedProvider) ?? null;
+  const canGenerate = isCompleted && providers.length > 0 && Boolean(selectedProviderOption) && !generating;
 
   const showToast = (message: string, type: ToastType) => {
     setToast({ message, type });
@@ -81,32 +78,24 @@ export function useTranscriptionMindMap({ record, onRecordPatch }: Transcription
         return;
       }
 
-      const nextProviders = LANGUAGE_MODEL_PROVIDER_ORDER.flatMap((provider) => {
-        const config = settings.providers[provider];
-        if (!config.enabled || !config.apiKeyConfigured) {
-          return [];
-        }
-
-        return [{
-          provider,
-          label: `${LANGUAGE_MODEL_PROVIDER_META[provider].label} · ${config.model}`,
-          model: config.model,
-        }];
-      });
+      const nextProviders = getEnabledLanguageModelOptions(settings);
 
       setProviders(nextProviders);
       setSelectedProvider((prev) => {
-        if (record.mindmapGenerator?.provider) {
-          const matched = nextProviders.find((item) => item.provider === record.mindmapGenerator?.provider);
+        if (record.mindmapGenerator?.providerId) {
+          const matched = nextProviders.find((item) =>
+            item.providerId === record.mindmapGenerator?.providerId
+            && (!record.mindmapGenerator?.modelId || item.modelId === record.mindmapGenerator.modelId),
+          );
           if (matched) {
-            return matched.provider;
+            return matched.value;
           }
         }
 
-        if (prev && nextProviders.some((item) => item.provider === prev)) {
+        if (prev && nextProviders.some((item) => item.value === prev)) {
           return prev;
         }
-        return nextProviders[0]?.provider ?? "";
+        return nextProviders[0]?.value ?? "";
       });
     } catch (error) {
       if (lastLoadedRecordIdRef.current === requestRecordId) {
@@ -144,10 +133,11 @@ export function useTranscriptionMindMap({ record, onRecordPatch }: Transcription
   };
 
   const handleGenerate = async () => {
-    if (!selectedProvider) return;
+    if (!selectedProviderOption) return;
 
     const requestRecordId = record.id;
-    const requestProvider = selectedProvider;
+    const requestProviderId = selectedProviderOption.providerId;
+    const requestModelId = selectedProviderOption.modelId;
     setGenerating(true);
     onRecordPatch({
       mindmapStatus: "generating",
@@ -156,7 +146,8 @@ export function useTranscriptionMindMap({ record, onRecordPatch }: Transcription
 
     try {
       const nextDocument = await generateTranscriptionMindMap(record.id, {
-        provider: requestProvider,
+        providerId: requestProviderId,
+        modelId: requestModelId,
       });
       if (lastLoadedRecordIdRef.current !== requestRecordId) {
         return;
@@ -168,8 +159,10 @@ export function useTranscriptionMindMap({ record, onRecordPatch }: Transcription
         mindmapPath: buildMindMapPath(record.savedPath),
         mindmapError: undefined,
         mindmapGenerator: {
-          provider: requestProvider,
-          model: providers.find((item) => item.provider === requestProvider)?.model || "",
+          providerId: requestProviderId,
+          providerName: selectedProviderOption.providerName,
+          modelId: requestModelId,
+          model: selectedProviderOption.model,
         },
       });
       showToast("思维导图已生成", "success");

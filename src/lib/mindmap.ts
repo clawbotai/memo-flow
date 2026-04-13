@@ -1,6 +1,6 @@
 'use client';
 
-import type { ApiResponse, LanguageModelProvider } from "@/types";
+import type { ApiResponse } from "@/types";
 import type { MindMapDocument } from "@/types/mindmap";
 import { helperRequest } from "@/lib/local-helper-client";
 
@@ -9,7 +9,8 @@ export interface MindMapResponse {
 }
 
 export interface GenerateMindMapRequest {
-  provider: LanguageModelProvider;
+  providerId: string;
+  modelId: string;
 }
 
 export async function fetchTranscriptionMindMap(id: string): Promise<MindMapDocument> {

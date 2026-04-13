@@ -1,5 +1,3 @@
-import type { LanguageModelProvider } from "./index";
-
 export interface MindMapNodeData {
   text: string;
   expand?: boolean;
@@ -56,7 +54,8 @@ export interface MindMapDocument {
 }
 
 export interface MindMapGeneratorInfo {
-  provider: LanguageModelProvider;
+  providerId: string;
+  providerName?: string;
+  modelId?: string;
   model: string;
 }
-

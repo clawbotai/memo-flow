@@ -13,23 +13,22 @@ import {
   generateContentPoints,
 } from '@/lib/content-generation';
 import { fetchLanguageModelSettings } from '@/lib/language-model-settings';
-import {
-  LANGUAGE_MODEL_PROVIDER_META,
-  LANGUAGE_MODEL_PROVIDER_ORDER,
-} from '@/lib/language-models';
+import { getEnabledLanguageModelOptions } from '@/lib/language-models';
 import type {
   ContentPlatform,
   ContentPointType,
   GeneratedContentDraft,
   GeneratedPoint,
-  LanguageModelProvider,
 } from '@/types';
 import type { TranscriptionRecord } from '@/types/transcription-history';
 
 interface ProviderOption {
-  provider: LanguageModelProvider;
+  providerId: string;
+  providerName: string;
+  modelId: string;
   label: string;
   model: string;
+  value: string;
 }
 
 interface TranscriptionContentGenerationProps {
@@ -116,7 +115,7 @@ export function TranscriptionContentGeneration({
 }: TranscriptionContentGenerationProps) {
   const requestRecordIdRef = useRef('');
   const [providers, setProviders] = useState<ProviderOption[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState<LanguageModelProvider | ''>('');
+  const [selectedModelKey, setSelectedModelKey] = useState('');
   const [platform, setPlatform] = useState<ContentPlatform>('redbook');
   const [points, setPoints] = useState<GeneratedPoint[]>([]);
   const [theme, setTheme] = useState<string | undefined>(undefined);
@@ -141,8 +140,21 @@ export function TranscriptionContentGeneration({
       points: points.filter((point) => point.type === group.type),
     }));
   }, [points]);
+  const groupedProviders = useMemo(() => {
+    const groups = new Map<string, ProviderOption[]>();
+    providers.forEach((item) => {
+      const existing = groups.get(item.providerId) || [];
+      existing.push(item);
+      groups.set(item.providerId, existing);
+    });
+    return groups;
+  }, [providers]);
 
-  const canExtract = isCompleted && hasProviders && Boolean(selectedProvider) && !extracting;
+  const selectedProviderOption = useMemo(
+    () => providers.find((item) => item.value === selectedModelKey) ?? null,
+    [providers, selectedModelKey],
+  );
+  const canExtract = isCompleted && hasProviders && Boolean(selectedProviderOption) && !extracting;
   const canGenerate = canExtract && selectedPoints.length > 0 && !generating;
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
@@ -186,26 +198,14 @@ export function TranscriptionContentGeneration({
           return;
         }
 
-        const nextProviders = LANGUAGE_MODEL_PROVIDER_ORDER.flatMap((provider) => {
-          const config = settings.providers[provider];
-          if (!config.enabled || !config.apiKeyConfigured) {
-            return [];
-          }
-          return [
-            {
-              provider,
-              label: `${LANGUAGE_MODEL_PROVIDER_META[provider].label} · ${config.model}`,
-              model: config.model,
-            },
-          ];
-        });
+        const nextProviders = getEnabledLanguageModelOptions(settings);
 
         setProviders(nextProviders);
-        setSelectedProvider((prev) => {
-          if (prev && nextProviders.some((item) => item.provider === prev)) {
+        setSelectedModelKey((prev) => {
+          if (prev && nextProviders.some((item) => item.value === prev)) {
             return prev;
           }
-          return nextProviders[0]?.provider ?? '';
+          return nextProviders[0]?.value ?? '';
         });
       } catch (error) {
         if (requestRecordIdRef.current === record.id) {
@@ -281,7 +281,7 @@ export function TranscriptionContentGeneration({
   };
 
   const handleExtract = async () => {
-    if (!selectedProvider) {
+    if (!selectedProviderOption) {
       return;
     }
 
@@ -293,7 +293,8 @@ export function TranscriptionContentGeneration({
 
     try {
       const result = await generateContentPoints(record.id, {
-        provider: selectedProvider,
+        providerId: selectedProviderOption.providerId,
+        modelId: selectedProviderOption.modelId,
         platform,
       });
       if (requestRecordIdRef.current !== record.id) {
@@ -325,7 +326,7 @@ export function TranscriptionContentGeneration({
   };
 
   const handleGenerate = async () => {
-    if (!selectedProvider || platform !== 'redbook' || selectedPoints.length === 0) {
+    if (!selectedProviderOption || platform !== 'redbook' || selectedPoints.length === 0) {
       return;
     }
 
@@ -337,7 +338,8 @@ export function TranscriptionContentGeneration({
 
     try {
       const nextDraft = await generateContentDraft(record.id, {
-        provider: selectedProvider,
+        providerId: selectedProviderOption.providerId,
+        modelId: selectedProviderOption.modelId,
         platform,
         selectedPointIds,
       });
@@ -384,7 +386,7 @@ export function TranscriptionContentGeneration({
   const statusHint = !isCompleted
     ? '转录完成后才能提炼观点和生成内容。'
     : !hasProviders
-      ? '请先在设置中启用并保存至少一个可用的语言模型 Provider。'
+      ? '请先在设置中启用并保存至少一个可用模型。'
       : null;
 
   return (
@@ -418,15 +420,22 @@ export function TranscriptionContentGeneration({
               <div className="relative">
                 <select
                   className="h-10 w-full appearance-none rounded-2xl border border-border/60 bg-white/85 px-3.5 pr-9 text-sm text-foreground outline-none transition-all focus:border-primary/35 focus:bg-white"
-                  value={selectedProvider}
-                  onChange={(event) => setSelectedProvider(event.target.value as LanguageModelProvider)}
+                  value={selectedModelKey}
+                  onChange={(event) => setSelectedModelKey(event.target.value)}
                   disabled={loadingProviders || !hasProviders}
                 >
                   {hasProviders ? (
-                    providers.map((item) => (
-                      <option key={item.provider} value={item.provider}>
-                        {item.label}
-                      </option>
+                    Array.from(groupedProviders.entries()).map(([providerId, items]) => (
+                      <optgroup
+                        key={providerId}
+                        label={items[0]?.providerName || "Provider"}
+                      >
+                        {items.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))
                   ) : (
                     <option value="">暂无可用模型</option>

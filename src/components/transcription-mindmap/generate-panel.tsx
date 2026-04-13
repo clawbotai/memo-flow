@@ -4,19 +4,18 @@ import React from "react";
 import { Loader2, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToastManager } from "@/components/ui/toast";
-import type { LanguageModelProvider } from "@/types";
 import type { TranscriptionRecord } from "@/types/transcription-history";
 import type { ProviderOption, ToastType } from "./shared";
 
 interface MindMapGeneratePanelProps {
   providers: ProviderOption[];
-  selectedProvider: LanguageModelProvider | "";
+  selectedProvider: string;
   loadingProviders: boolean;
   canGenerate: boolean;
   generating: boolean;
   record: TranscriptionRecord;
   toast: { message: string; type: ToastType } | null;
-  onProviderChange: (provider: LanguageModelProvider) => void;
+  onProviderChange: (provider: string) => void;
   onGenerate: () => void | Promise<void>;
   onDismissToast: () => void;
 }
@@ -43,14 +42,14 @@ export function MindMapGeneratePanel({
               <select
                 className="h-10 w-full appearance-none rounded-[16px] border border-border/60 bg-white/82 px-3.5 pr-9 text-[13px] text-foreground/90 outline-none transition-all duration-200 focus:border-primary/35 focus:bg-white focus:shadow-[0_10px_24px_rgba(24,68,39,0.08)]"
                 value={selectedProvider}
-                onChange={(event) => onProviderChange(event.target.value as LanguageModelProvider)}
+                onChange={(event) => onProviderChange(event.target.value)}
                 disabled={loadingProviders || providers.length === 0}
               >
                 {providers.length === 0 ? (
                   <option value="">暂无可用模型</option>
                 ) : (
                   providers.map((item) => (
-                    <option key={item.provider} value={item.provider}>
+                    <option key={item.value} value={item.value}>
                       {item.label}
                     </option>
                   ))
