@@ -41,7 +41,7 @@ export function TranscriptionEnginePanel({ visible }: TranscriptionEnginePanelPr
 
   if (!loaded) {
     return (
-      <section aria-hidden={!visible} className={cn("space-y-6", !visible && "hidden")}>
+      <section aria-hidden={!visible} className={cn("space-y-5", !visible && "hidden")}>
         <div className="flex items-center justify-center py-14">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -50,18 +50,18 @@ export function TranscriptionEnginePanel({ visible }: TranscriptionEnginePanelPr
   }
 
   return (
-    <section aria-hidden={!visible} className={cn("space-y-6", !visible && "hidden")}>
+    <section aria-hidden={!visible} className={cn("space-y-5", !visible && "hidden")}>
       <div className="space-y-1">
-        <h3 className="text-lg font-semibold">转录引擎</h3>
+        <h3 className="text-[15px] font-semibold">转录引擎</h3>
         <p className="text-sm text-muted-foreground">
           选择语音识别引擎。本地 Whisper 无需网络但需要安装环境，在线模型只需 API Key。
         </p>
       </div>
 
-      <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
-        <div className="space-y-4">
+      <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm shadow-primary/5">
+        <div className="space-y-3">
           <h4 className="text-sm font-medium">选择引擎</h4>
-          <div className="grid gap-3">
+          <div className="grid gap-2.5">
             {ENGINE_OPTIONS.map((engineOpt) => {
               const selected = config.activeEngine === engineOpt.id;
 
@@ -71,7 +71,7 @@ export function TranscriptionEnginePanel({ visible }: TranscriptionEnginePanelPr
                   type="button"
                   onClick={() => setActiveEngine(engineOpt.id)}
                   className={cn(
-                    "relative flex items-center justify-between rounded-2xl border p-4 text-left transition-all",
+                    "relative flex items-center justify-between rounded-xl border p-3.5 text-left transition-all",
                     selected
                       ? "border-primary bg-primary/8 shadow-sm shadow-primary/10"
                       : "border-border/60 bg-background/80 hover:border-primary/35 hover:bg-accent/20",
@@ -80,7 +80,7 @@ export function TranscriptionEnginePanel({ visible }: TranscriptionEnginePanelPr
                   <div className="flex items-start gap-3">
                     <div
                       className={cn(
-                        "mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border",
+                        "mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg border",
                         selected
                           ? "border-primary/30 bg-primary/12 text-primary"
                           : "border-border/60 bg-card text-muted-foreground",
@@ -113,8 +113,8 @@ export function TranscriptionEnginePanel({ visible }: TranscriptionEnginePanelPr
       </div>
 
       {config.activeEngine === "qwen-asr" && (
-        <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
-          <div className="space-y-4">
+        <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm shadow-primary/5">
+          <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-primary" />
               <h4 className="text-sm font-medium">千问 ASR 配置</h4>
@@ -154,7 +154,7 @@ export function TranscriptionEnginePanel({ visible }: TranscriptionEnginePanelPr
 
             <div className="space-y-2">
               <label className="text-xs font-medium">模型</label>
-              <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2.5">
+              <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2">
                 <Globe className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">Qwen3-ASR-Flash-Filetrans</span>
                 <span className="ml-auto text-xs text-muted-foreground">长音频转写</span>
@@ -164,7 +164,7 @@ export function TranscriptionEnginePanel({ visible }: TranscriptionEnginePanelPr
               </p>
             </div>
 
-            <div className="flex items-center gap-3 border-t border-border/50 pt-4">
+            <div className="flex items-center gap-3 border-t border-border/50 pt-3">
               <Button
                 size="sm"
                 variant="outline"
@@ -198,7 +198,7 @@ export function TranscriptionEnginePanel({ visible }: TranscriptionEnginePanelPr
         </div>
       )}
 
-      <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
+      <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm shadow-primary/5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">当前引擎</span>

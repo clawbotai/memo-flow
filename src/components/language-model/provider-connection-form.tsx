@@ -38,7 +38,7 @@ export function ProviderConnectionForm({
             onUpdateConnection({ name: event.target.value })
           }
           placeholder="My Provider"
-          className="h-11 rounded-2xl bg-background/55"
+          className="h-10 rounded-xl bg-background/55"
         />
       </div>
 
@@ -50,7 +50,7 @@ export function ProviderConnectionForm({
             onUpdateConnection({ baseUrl: event.target.value })
           }
           placeholder="https://api.example.com/v1"
-          className="h-11 rounded-2xl bg-background/55"
+          className="h-10 rounded-xl bg-background/55"
         />
       </div>
 
@@ -77,7 +77,7 @@ export function ProviderConnectionForm({
                   ? "已保存 API Key，如需更换请重新输入"
                   : getProviderApiKeyPlaceholder(provider)
               }
-              className="h-11 rounded-2xl bg-background/55 pr-11"
+              className="h-10 rounded-xl bg-background/55 pr-11"
             />
             <button
               type="button"
@@ -97,7 +97,7 @@ export function ProviderConnectionForm({
             <Button
               type="button"
               variant="outline"
-              className="h-11 rounded-2xl px-3"
+              className="h-10 rounded-xl px-3"
               onClick={onClearApiKey}
             >
               清除

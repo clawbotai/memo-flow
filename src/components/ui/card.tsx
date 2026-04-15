@@ -6,9 +6,8 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
     <div
       ref={ref}
       className={cn(
-        "rounded-2xl border border-border/50 bg-card/60 text-card-foreground shadow-sm backdrop-blur-sm overflow-hidden",
-        // Add organic shape with subtle gradients
-        "relative before:absolute before:inset-0 before:rounded-[calc(theme(borderRadius.2xl)-1px)] before:bg-gradient-to-br before:from-transparent before:via-primary/5 before:to-transparent before:-z-10",
+        "rounded-xl border border-border/50 bg-card/60 text-card-foreground shadow-sm backdrop-blur-sm overflow-hidden",
+        "relative before:absolute before:inset-0 before:rounded-[calc(theme(borderRadius.xl)-1px)] before:bg-gradient-to-br before:from-transparent before:via-primary/5 before:to-transparent before:-z-10",
         className
       )}
       {...props}
@@ -21,7 +20,7 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("flex flex-col space-y-1.5 p-6", className)}
+      className={cn("flex flex-col space-y-1 p-5", className)}
       {...props}
     />
   )
@@ -32,7 +31,7 @@ const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HT
   ({ className, ...props }, ref) => (
     <h3
       ref={ref}
-      className={cn("text-2xl font-semibold leading-none tracking-tight", className)}
+      className={cn("text-lg font-semibold leading-none tracking-tight", className)}
       {...props}
     />
   )
@@ -52,7 +51,7 @@ CardDescription.displayName = "CardDescription";
 
 const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+    <div ref={ref} className={cn("p-5 pt-0", className)} {...props} />
   )
 );
 CardContent.displayName = "CardContent";
@@ -61,7 +60,7 @@ const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("flex items-center p-6 pt-0", className)}
+      className={cn("flex items-center p-5 pt-0", className)}
       {...props}
     />
   )

@@ -51,21 +51,21 @@ export function WhisperModelSection({
   );
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
-      <div className="space-y-4">
+    <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm shadow-primary/5">
+      <div className="space-y-3">
         <div>
           <h4 className="text-sm font-medium">选择模型</h4>
           <p className="mt-1 text-sm text-muted-foreground">Small 更快，Medium 识别质量更高。</p>
         </div>
 
-        <div className="grid gap-3">
+        <div className="grid gap-2.5">
           {MODEL_OPTIONS.map((model) => (
             <button
               key={model.id}
               type="button"
               onClick={() => onModelSelect(model.id)}
               className={cn(
-                "relative flex items-center justify-between rounded-2xl border p-4 text-left transition-all",
+                "relative flex items-center justify-between rounded-xl border p-3.5 text-left transition-all",
                 selectedModel === model.id
                   ? "border-primary bg-primary/8 shadow-sm shadow-primary/10"
                   : "border-border/60 bg-background/80 hover:border-primary/35 hover:bg-accent/20",

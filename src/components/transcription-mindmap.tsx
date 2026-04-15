@@ -47,7 +47,7 @@ export function TranscriptionMindMap(props: TranscriptionMindMapProps) {
 
   if (!isCompleted) {
     return (
-      <div className="flex h-full flex-1 items-center justify-center rounded-[28px] border border-dashed border-border/60 bg-muted/15 px-8 py-12 text-center">
+      <div className="flex h-full flex-1 items-center justify-center rounded-2xl border border-dashed border-border/60 bg-muted/15 px-8 py-12 text-center">
         <div className="max-w-md space-y-3">
           <h3 className="text-base font-medium">转录完成后可生成思维导图</h3>
           <p className="text-sm leading-relaxed text-muted-foreground">

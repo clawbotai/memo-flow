@@ -21,15 +21,15 @@ export function GeneralSettingsPanel({ visible }: GeneralSettingsPanelProps) {
   const currentTheme = mounted ? (theme ?? "system") : "system";
 
   return (
-    <section aria-hidden={!visible} className={cn("space-y-6", !visible && "hidden")}>
+    <section aria-hidden={!visible} className={cn("space-y-5", !visible && "hidden")}>
       <div className="space-y-1">
-        <h3 className="text-lg font-semibold">通用</h3>
+        <h3 className="text-[15px] font-semibold">通用</h3>
         <p className="text-sm text-muted-foreground">
           管理应用的主题外观。主题切换会立即生效并自动保存。
         </p>
       </div>
 
-      <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
+      <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm shadow-primary/5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h4 className="text-sm font-medium">主题</h4>
@@ -42,7 +42,7 @@ export function GeneralSettingsPanel({ visible }: GeneralSettingsPanelProps) {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3">
+        <div className="mt-3 grid gap-2.5">
           {THEME_OPTIONS.map((option) => {
             const Icon = option.icon;
             const selected = currentTheme === option.id;
@@ -53,7 +53,7 @@ export function GeneralSettingsPanel({ visible }: GeneralSettingsPanelProps) {
                 type="button"
                 onClick={() => setTheme(option.id)}
                 className={cn(
-                  "flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition-all",
+                  "flex w-full items-center justify-between rounded-xl border px-3.5 py-3 text-left transition-all",
                   selected
                     ? "border-primary bg-primary/8 shadow-sm shadow-primary/10"
                     : "border-border/60 bg-background/80 hover:border-primary/35 hover:bg-accent/20",
@@ -63,7 +63,7 @@ export function GeneralSettingsPanel({ visible }: GeneralSettingsPanelProps) {
                 <div className="flex items-start gap-3">
                   <div
                     className={cn(
-                      "mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border",
+                      "mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg border",
                       selected
                         ? "border-primary/30 bg-primary/12 text-primary"
                         : "border-border/60 bg-card text-muted-foreground",

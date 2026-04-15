@@ -35,8 +35,8 @@ export function WhisperRuntimeSection({
   onToggleManualCommands,
 }: WhisperRuntimeSectionProps) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
-      <div className="space-y-5">
+    <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm shadow-primary/5">
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">本机 helper</span>
           <div className="flex items-center gap-2">
@@ -76,7 +76,7 @@ export function WhisperRuntimeSection({
             {runtimeChecklist.map((item) => (
               <div
                 key={item.id}
-                className="flex items-start justify-between gap-4 rounded-2xl border border-border/60 bg-background/70 px-4 py-3"
+                className="flex items-start justify-between gap-4 rounded-xl border border-border/60 bg-background/70 px-4 py-3"
               >
                 <div className="min-w-0">
                   <div className="text-sm font-medium">{item.label}</div>
@@ -96,7 +96,7 @@ export function WhisperRuntimeSection({
           </div>
 
           {status?.isLegacyPayload && (
-            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+            <div className="rounded-xl border border-border/60 bg-background/70 p-4">
               <p className="text-sm font-medium">检测信息来自旧版 helper</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 当前 helper 仍使用旧状态结构，Whisper / ffmpeg 是否可用会继续按实际结果判断；
@@ -106,7 +106,7 @@ export function WhisperRuntimeSection({
           )}
 
           {!!status?.missingRequirements?.length && (
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
               <p className="text-sm font-medium text-foreground">当前本地转录环境未完成</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 缺失项：
@@ -143,7 +143,7 @@ export function WhisperRuntimeSection({
           )}
 
           {showManualCommands && (
-            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+            <div className="rounded-xl border border-border/60 bg-background/70 p-4">
               <p className="text-sm font-medium">手动安装命令</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 如果一键安装失败，可在系统终端依次运行以下命令。
@@ -155,7 +155,7 @@ export function WhisperRuntimeSection({
           )}
 
           {installProgress && installProgress.status !== "idle" && (
-            <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+            <div className="rounded-xl border border-border/60 bg-background/70 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">一键安装进度</p>

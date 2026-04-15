@@ -25,7 +25,7 @@ export function SettingsSidebar({
             type="button"
             onClick={() => onSectionChange(section.id)}
             className={cn(
-              "flex min-w-[160px] items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-all md:min-w-0",
+              "flex min-w-[160px] items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-all md:min-w-0",
               activeSection === section.id
                 ? "border-primary/30 bg-background shadow-sm shadow-primary/10"
                 : "border-transparent text-muted-foreground hover:border-border/60 hover:bg-background/70 hover:text-foreground",
@@ -33,7 +33,7 @@ export function SettingsSidebar({
           >
             <div
               className={cn(
-                "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl",
+                "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
                 activeSection === section.id
                   ? "bg-primary/12 text-primary"
                   : "bg-background/80 text-muted-foreground",

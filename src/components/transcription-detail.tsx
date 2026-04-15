@@ -240,9 +240,9 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-6 md:flex-row">
+    <div className="flex min-h-0 flex-col gap-6 xl:h-full xl:flex-row">
       {/* ── 左侧：音源信息 ── */}
-      <div className="flex w-full shrink-0 flex-col gap-4 md:h-full md:w-[360px]">
+      <div className="flex w-full shrink-0 flex-col gap-4 xl:h-full xl:w-[340px] 2xl:w-[360px]">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center justify-between text-base">
@@ -370,8 +370,8 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
       </div>
 
       {/* ── 右侧：逐字稿 ── */}
-      <div className="flex-1 min-w-0 flex flex-col">
-        <Card className="flex min-h-[420px] flex-1 flex-col md:min-h-0">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Card className="flex min-h-[420px] flex-1 flex-col xl:min-h-0">
           <TranscriptionDetailTabs
             connected={connected}
             isActive={isActive}

@@ -267,22 +267,22 @@ export function WhisperPanel({ open, visible, onClose }: WhisperPanelProps) {
   const runtimeChecklist = buildRuntimeChecklist(status);
 
   return (
-    <section aria-hidden={!visible} className={cn("space-y-6", !visible && "hidden")}>
+    <section aria-hidden={!visible} className={cn("space-y-5", !visible && "hidden")}>
       <div className="space-y-1">
-        <h3 className="text-lg font-semibold">Whisper 设置</h3>
+        <h3 className="text-[15px] font-semibold">Whisper 设置</h3>
         <p className="text-sm text-muted-foreground">
           连接本机 helper，读取当前电脑上的 Whisper/ffmpeg/模型配置。
         </p>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center rounded-2xl border border-border/60 bg-card/70 py-14">
+        <div className="flex items-center justify-center rounded-xl border border-border/60 bg-card/70 py-14">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {error && (
-            <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {error}
             </div>
           )}

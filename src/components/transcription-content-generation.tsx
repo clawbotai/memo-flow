@@ -60,6 +60,19 @@ function buildDraftCopyText(draft: GeneratedContentDraft) {
     .join('\n\n');
 }
 
+function formatDateTime(value: Date | string | undefined) {
+  if (!value) {
+    return '';
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return date.toLocaleString();
+}
+
 function PointCard({
   point,
   selected,
@@ -73,7 +86,7 @@ function PointCard({
     <button
       type="button"
       onClick={onToggle}
-      className={`w-full rounded-2xl border p-4 text-left transition-all ${
+      className={`w-full rounded-xl border p-4 text-left transition-all ${
         selected
           ? 'border-primary/35 bg-primary/[0.07] shadow-[0_10px_24px_rgba(24,68,39,0.08)]'
           : 'border-border/60 bg-background/75 hover:border-border hover:bg-background'
@@ -391,8 +404,8 @@ export function TranscriptionContentGeneration({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
-        <section className="flex min-h-0 flex-col rounded-[28px] border border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,246,0.88))] p-5 shadow-[0_18px_50px_rgba(20,40,20,0.06)]">
+      <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
+        <section className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,246,0.88))] p-5 shadow-[0_18px_50px_rgba(20,40,20,0.06)]">
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/50 pb-4">
             <div>
               <h3 className="text-base font-semibold">观点提炼</h3>
@@ -405,21 +418,21 @@ export function TranscriptionContentGeneration({
                 已选 {selectedPointIds.length} / {points.length || 0}
               </Badge>
               {record.pointExtractionStatus === 'ready' && record.pointExtractionUpdatedAt && (
-                <Badge variant="secondary">
-                  最近更新 {record.pointExtractionUpdatedAt.toLocaleString()}
+                <Badge variant="secondary" className="max-w-full whitespace-normal break-all text-left">
+                  最近更新 {formatDateTime(record.pointExtractionUpdatedAt)}
                 </Badge>
               )}
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto]">
-            <div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_180px_auto]">
+            <div className="min-w-0">
               <label className="mb-1.5 block text-xs font-medium tracking-[0.02em] text-foreground/85">
                 模型
               </label>
               <div className="relative">
                 <select
-                  className="h-10 w-full appearance-none rounded-2xl border border-border/60 bg-white/85 px-3.5 pr-9 text-sm text-foreground outline-none transition-all focus:border-primary/35 focus:bg-white"
+                  className="h-10 w-full appearance-none rounded-xl border border-border/60 bg-white/85 px-3.5 pr-9 text-sm text-foreground outline-none transition-all focus:border-primary/35 focus:bg-white"
                   value={selectedModelKey}
                   onChange={(event) => setSelectedModelKey(event.target.value)}
                   disabled={loadingProviders || !hasProviders}
@@ -451,12 +464,12 @@ export function TranscriptionContentGeneration({
               </div>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="mb-1.5 block text-xs font-medium tracking-[0.02em] text-foreground/85">
                 平台
               </label>
               <select
-                className="h-10 w-full appearance-none rounded-2xl border border-border/60 bg-white/85 px-3.5 text-sm text-foreground outline-none transition-all focus:border-primary/35 focus:bg-white"
+                className="h-10 w-full appearance-none rounded-xl border border-border/60 bg-white/85 px-3.5 text-sm text-foreground outline-none transition-all focus:border-primary/35 focus:bg-white"
                 value={platform}
                 onChange={(event) => setPlatform(event.target.value as ContentPlatform)}
               >
@@ -468,7 +481,7 @@ export function TranscriptionContentGeneration({
               </select>
             </div>
 
-            <div className="flex items-end">
+            <div className="flex items-end sm:col-span-2 2xl:col-span-1">
               <Button className="w-full" disabled={!canExtract} onClick={handleExtract}>
                 {extracting || record.pointExtractionStatus === 'generating' ? (
                   <>
@@ -483,13 +496,13 @@ export function TranscriptionContentGeneration({
           </div>
 
           {statusHint && (
-            <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-700">
+            <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-700">
               {statusHint}
             </div>
           )}
 
           {record.pointExtractionError && (
-            <div className="mt-4 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            <div className="mt-4 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               {record.pointExtractionError}
             </div>
           )}
@@ -503,7 +516,7 @@ export function TranscriptionContentGeneration({
                 </div>
               </div>
             ) : points.length === 0 ? (
-              <div className="flex flex-1 items-center justify-center rounded-[24px] border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center">
+              <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center">
                 <div className="max-w-md space-y-2">
                   <h4 className="text-sm font-medium">还没有观点结果</h4>
                   <p className="text-sm leading-6 text-muted-foreground">
@@ -513,7 +526,7 @@ export function TranscriptionContentGeneration({
               </div>
             ) : (
               <>
-                <div className="rounded-[24px] border border-border/60 bg-white/70 px-4 py-4">
+                <div className="rounded-xl border border-border/60 bg-white/70 px-4 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
@@ -545,7 +558,7 @@ export function TranscriptionContentGeneration({
                         ))}
                       </div>
                     ) : (
-                      <div className="rounded-2xl border border-dashed border-border/60 px-4 py-4 text-sm text-muted-foreground">
+                      <div className="rounded-xl border border-dashed border-border/60 px-4 py-4 text-sm text-muted-foreground">
                         {group.emptyText}
                       </div>
                     )}
@@ -556,15 +569,15 @@ export function TranscriptionContentGeneration({
           </div>
         </section>
 
-        <section className="flex min-h-0 flex-col rounded-[28px] border border-border/60 bg-[radial-gradient(circle_at_top,rgba(246,250,242,0.95),rgba(255,255,255,0.98)_55%)] p-5 shadow-[0_18px_48px_rgba(20,40,20,0.05)]">
-          <div className="flex items-start justify-between gap-4 border-b border-border/50 pb-4">
+        <section className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/60 bg-[radial-gradient(circle_at_top,rgba(246,250,242,0.95),rgba(255,255,255,0.98)_55%)] p-5 shadow-[0_18px_48px_rgba(20,40,20,0.05)]">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/50 pb-4">
             <div>
               <h3 className="text-base font-semibold">小红书初稿</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 基于已选观点生成标题、正文和标签，Phase 1 自动持久化保存。
               </p>
             </div>
-            <Button variant="outline" size="sm" disabled={!draft} onClick={handleCopy}>
+            <Button variant="outline" size="sm" className="shrink-0" disabled={!draft} onClick={handleCopy}>
               {copied ? (
                 <>
                   <Check className="mr-1.5 h-4 w-4 text-green-600" />
@@ -579,7 +592,7 @@ export function TranscriptionContentGeneration({
             </Button>
           </div>
 
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button className="flex-1" disabled={!canGenerate} onClick={handleGenerate}>
               {generating || record.contentGenerationStatus === 'generating' ? (
                 <>
@@ -596,24 +609,24 @@ export function TranscriptionContentGeneration({
           </div>
 
           {!selectedPoints.length && points.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-border/60 bg-muted/35 px-4 py-3 text-sm text-muted-foreground">
+            <div className="mt-4 rounded-xl border border-border/60 bg-muted/35 px-4 py-3 text-sm text-muted-foreground">
               至少勾选一条观点后，才能生成平台内容。
             </div>
           )}
 
           {record.contentGenerationError && (
-            <div className="mt-4 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            <div className="mt-4 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               {record.contentGenerationError}
             </div>
           )}
 
           <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden">
             {draft ? (
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[24px] border border-border/60 bg-white/82 p-4">
-                <div className="flex items-center justify-between gap-3">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-xl border border-border/60 bg-white/82 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <Badge variant="secondary">Version {draft.version}</Badge>
-                  <span className="text-xs text-muted-foreground">
-                    更新于 {new Date(draft.updatedAt).toLocaleString()}
+                  <span className="text-xs text-muted-foreground break-all">
+                    更新于 {formatDateTime(draft.updatedAt)}
                   </span>
                 </div>
 
@@ -668,7 +681,7 @@ export function TranscriptionContentGeneration({
                 </div>
               </div>
             ) : (
-              <div className="flex flex-1 items-center justify-center rounded-[24px] border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center">
+              <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center">
                 <div className="max-w-sm space-y-2">
                   <h4 className="text-sm font-medium">还没有平台初稿</h4>
                   <p className="text-sm leading-6 text-muted-foreground">

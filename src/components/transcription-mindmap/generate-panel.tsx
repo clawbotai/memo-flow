@@ -34,13 +34,13 @@ export function MindMapGeneratePanel({
 }: MindMapGeneratePanelProps) {
   return (
     <div className="flex h-full flex-1 items-center justify-center px-6 py-10">
-      <div className="w-full max-w-[320px] rounded-[24px] border border-white/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(249,251,247,0.92))] p-4 shadow-[0_16px_42px_rgba(20,40,20,0.07)] ring-1 ring-black/[0.03] backdrop-blur-xl">
+      <div className="w-full max-w-[320px] rounded-xl border border-white/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(249,251,247,0.92))] p-4 shadow-[0_16px_42px_rgba(20,40,20,0.07)] ring-1 ring-black/[0.03] backdrop-blur-xl">
         <div className="space-y-3">
           <div>
             <label className="mb-1.5 block text-[12px] font-medium tracking-[0.01em] text-foreground/88">模型</label>
             <div className="relative">
               <select
-                className="h-10 w-full appearance-none rounded-[16px] border border-border/60 bg-white/82 px-3.5 pr-9 text-[13px] text-foreground/90 outline-none transition-all duration-200 focus:border-primary/35 focus:bg-white focus:shadow-[0_10px_24px_rgba(24,68,39,0.08)]"
+                className="h-10 w-full appearance-none rounded-lg border border-border/60 bg-white/82 px-3.5 pr-9 text-[13px] text-foreground/90 outline-none transition-all duration-200 focus:border-primary/35 focus:bg-white focus:shadow-[0_10px_24px_rgba(24,68,39,0.08)]"
                 value={selectedProvider}
                 onChange={(event) => onProviderChange(event.target.value)}
                 disabled={loadingProviders || providers.length === 0}
@@ -66,7 +66,7 @@ export function MindMapGeneratePanel({
           </div>
 
           <Button
-            className="h-10 w-full rounded-[16px] bg-primary text-[14px] font-medium tracking-[0.01em] text-primary-foreground shadow-[0_14px_28px_rgba(24,68,39,0.14)] hover:bg-primary/92"
+            className="h-10 w-full rounded-lg bg-primary text-[14px] font-medium tracking-[0.01em] text-primary-foreground shadow-[0_14px_28px_rgba(24,68,39,0.14)] hover:bg-primary/92"
             disabled={!canGenerate}
             onClick={onGenerate}
           >
@@ -87,7 +87,7 @@ export function MindMapGeneratePanel({
           )}
 
           {record.mindmapError && (
-            <div className="rounded-[16px] border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-[12px] text-destructive">
+            <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-[12px] text-destructive">
               {record.mindmapError}
             </div>
           )}

@@ -50,14 +50,14 @@ export function ModelList({
           type="button"
           variant="ghost"
           onClick={onAddModel}
-          className="h-9 rounded-xl px-2 text-sm text-muted-foreground hover:text-foreground"
+          className="h-9 rounded-lg px-2 text-sm text-muted-foreground hover:text-foreground"
         >
           <Plus className="mr-1 h-4 w-4" />
           Add Model
         </Button>
       </div>
 
-      <div className="space-y-3 rounded-[24px] border border-border/70 bg-background/30 p-3">
+      <div className="space-y-3 rounded-xl border border-border/70 bg-background/30 p-3">
         {provider.models.map((model) => {
           const itemKey = `${provider.id}:${model.id}`;
           const itemResult = providerFeedback[itemKey];

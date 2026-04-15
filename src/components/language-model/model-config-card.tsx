@@ -40,7 +40,7 @@ export function ModelConfigCard({
   return (
     <div
       className={cn(
-        "rounded-[22px] border p-3 transition-all",
+        "rounded-xl border p-3 transition-all",
         isSelected
           ? "border-primary/25 bg-primary/[0.05]"
           : "border-border/60 bg-background/55",
@@ -77,7 +77,7 @@ export function ModelConfigCard({
                   onUpdateConfig({ name: event.target.value })
                 }
                 placeholder="Display Name"
-                className="h-11 rounded-2xl bg-background/70"
+                className="h-10 rounded-xl bg-background/70"
               />
             </div>
             <div className="space-y-2">
@@ -89,7 +89,7 @@ export function ModelConfigCard({
                   onUpdateConfig({ model: event.target.value })
                 }
                 placeholder="gpt-4.1-mini"
-                className="h-11 rounded-2xl bg-background/70"
+                className="h-10 rounded-xl bg-background/70"
               />
             </div>
           </div>
@@ -151,7 +151,7 @@ export function ModelConfigCard({
       </div>
 
       {isExpanded && (
-        <div className="mt-4 space-y-3 rounded-[18px] border border-border/60 bg-background/40 p-3">
+        <div className="mt-4 space-y-3 rounded-xl border border-border/60 bg-background/40 p-3">
           <div className="space-y-2">
             <label className="text-[11px] font-medium text-muted-foreground">Temperature</label>
             <Input

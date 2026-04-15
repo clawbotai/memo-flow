@@ -51,14 +51,14 @@ export function DesktopTranscriptionDetailPage() {
   return (
     <PageScene
       containerClassName="max-w-none"
-      contentClassName="h-[calc(100vh-44px)] max-h-[calc(100vh-44px)] overflow-hidden px-5 py-5"
+      contentClassName="h-[calc(100vh-44px)] max-h-[calc(100vh-44px)] overflow-y-auto xl:overflow-hidden px-5 py-5"
     >
       <div className="h-full min-h-0">
         <Card className="flex h-full min-h-0 flex-col overflow-hidden">
           <CardHeader>
             <CardTitle>{record?.title ?? "转录任务信息"}</CardTitle>
           </CardHeader>
-          <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <CardContent className="flex min-h-0 flex-1 flex-col overflow-y-auto xl:overflow-hidden">
             {loading ? (
               <div className="flex min-h-[320px] flex-1 items-center justify-center">
                 <div className="text-center">

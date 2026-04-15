@@ -33,7 +33,7 @@ function ReservedPanel({
   description: string;
 }) {
   return (
-    <div className="flex h-full flex-1 items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/20 px-6 py-10 text-center">
+    <div className="flex h-full flex-1 items-center justify-center rounded-xl border border-dashed border-border/50 bg-muted/20 px-6 py-10 text-center">
       <div className="max-w-md space-y-2">
         <h3 className="text-base font-medium">{title}</h3>
         <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
@@ -250,7 +250,7 @@ export function TranscriptionDetailTabs(props: TranscriptionDetailTabsProps) {
         </TabsList>
       </CardHeader>
 
-      <CardContent className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-0 px-6 pb-6">
+      <CardContent className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-0 px-4 pb-4 lg:px-6 lg:pb-6">
         <TabsContent value="transcript" className="mt-0 flex h-full min-h-0 flex-1 flex-col border-0 bg-transparent p-0 data-[state=inactive]:hidden">
           <TranscriptTabPanel {...props} />
         </TabsContent>

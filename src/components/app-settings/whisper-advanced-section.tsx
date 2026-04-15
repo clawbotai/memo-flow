@@ -31,12 +31,12 @@ export function WhisperAdvancedSection({
   onConfigChange,
 }: WhisperAdvancedSectionProps) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm shadow-primary/5">
+    <div className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-sm shadow-primary/5">
       <div className="space-y-3">
         <button
           type="button"
           onClick={onToggleAdvanced}
-          className="flex w-full items-center justify-between rounded-2xl border border-border/60 bg-background/70 px-4 py-3 text-sm font-medium transition-colors hover:bg-accent/20"
+          className="flex w-full items-center justify-between rounded-lg border border-border/60 bg-background/70 px-3.5 py-2.5 text-sm font-medium transition-colors hover:bg-accent/20"
         >
           <div className="flex items-center gap-2">
             <Settings className="h-4 w-4 text-muted-foreground" />
@@ -51,8 +51,8 @@ export function WhisperAdvancedSection({
         </button>
 
         {showAdvanced && (
-          <div className="grid gap-4 rounded-2xl border border-border/60 bg-background/70 p-4">
-            <div className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="grid gap-4 rounded-xl border border-border/60 bg-background/70 p-4">
+            <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-card/70 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 建议填写用户电脑上的绝对路径；Windows 与 macOS 都可手动配置。
               </p>

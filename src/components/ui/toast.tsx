@@ -17,9 +17,9 @@ export function Toast({ message, type = 'info', duration = 3000, onClose }: Toas
   }, [duration, onClose]);
 
   const types = {
-    success: 'bg-background/90 border border-green-500/20 text-foreground shadow-[0_0_20px_rgba(34,197,94,0.1)] rounded-2xl',
-    error: 'bg-background/90 border border-red-500/20 text-foreground shadow-[0_0_20px_rgba(239,68,68,0.1)] rounded-2xl',
-    info: 'bg-background/90 border border-primary/20 text-foreground shadow-[0_0_20px_rgba(59,130,246,0.1)] rounded-2xl'
+    success: 'bg-background/90 border border-green-500/20 text-foreground shadow-[0_0_20px_rgba(34,197,94,0.1)] rounded-xl',
+    error: 'bg-background/90 border border-red-500/20 text-foreground shadow-[0_0_20px_rgba(239,68,68,0.1)] rounded-xl',
+    info: 'bg-background/90 border border-primary/20 text-foreground shadow-[0_0_20px_rgba(59,130,246,0.1)] rounded-xl'
   };
 
   const icons = {
@@ -31,7 +31,7 @@ export function Toast({ message, type = 'info', duration = 3000, onClose }: Toas
   return (
     <div
       className={cn(
-        'fixed bottom-4 right-4 px-6 py-4 rounded-2xl shadow-lg flex items-center gap-3 animate-slide-up z-50 backdrop-blur-md',
+        'fixed bottom-4 right-4 px-5 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-slide-up z-50 backdrop-blur-md',
         types[type]
       )}
     >

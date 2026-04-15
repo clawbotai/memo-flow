@@ -286,16 +286,16 @@ export function LanguageModelPanel({ visible }: LanguageModelPanelProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
-          <h3 className="text-lg font-semibold">模型供应商</h3>
+          <h3 className="text-[15px] font-semibold">模型供应商</h3>
           <p className="text-sm text-muted-foreground">
             左侧选择供应商，右侧维护当前供应商的连接信息与模型配置。
           </p>
         </div>
 
-        <Button type="button" variant="outline" onClick={handleAddProvider} className="rounded-2xl px-4">
+        <Button type="button" variant="outline" onClick={handleAddProvider} className="rounded-xl px-3.5">
           <Plus className="mr-2 h-4 w-4" />
           添加
         </Button>
@@ -342,7 +342,7 @@ export function LanguageModelPanel({ visible }: LanguageModelPanelProps) {
           const modelSuggestions = getProviderModelSuggestions(provider);
 
           return (
-            <div className="overflow-hidden rounded-[28px] border border-border/70 bg-card/85 shadow-[0_20px_55px_rgba(0,0,0,0.16)]">
+            <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/85 shadow-[0_20px_55px_rgba(0,0,0,0.16)]">
               <ProviderPanelHeader
                 provider={provider}
                 providerDirty={providerDirty}
@@ -408,7 +408,7 @@ export function LanguageModelPanel({ visible }: LanguageModelPanelProps) {
                 />
 
                 {!hasUsableApiKey && (
-                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-xs text-amber-200">
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-xs text-amber-200">
                     当前 Provider 尚未配置可用 API Key，测试和运行时不会出现在模型选择列表中。
                   </div>
                 )}
@@ -416,7 +416,7 @@ export function LanguageModelPanel({ visible }: LanguageModelPanelProps) {
                 {activeFeedback && (
                   <div
                     className={cn(
-                      "rounded-2xl border px-4 py-3 text-sm",
+                      "rounded-xl border px-4 py-3 text-sm",
                       activeFeedback.success
                         ? "border-primary/25 bg-primary/[0.08] text-primary"
                         : "border-destructive/25 bg-destructive/5 text-destructive",
@@ -430,7 +430,7 @@ export function LanguageModelPanel({ visible }: LanguageModelPanelProps) {
           );
         })()
       ) : (
-        <div className="rounded-[28px] border border-border/70 bg-card/85 p-8 text-sm text-muted-foreground shadow-[0_20px_55px_rgba(0,0,0,0.16)]">
+        <div className="rounded-2xl border border-border/70 bg-card/85 p-8 text-sm text-muted-foreground shadow-[0_20px_55px_rgba(0,0,0,0.16)]">
           暂无可配置的供应商。
         </div>
       )}

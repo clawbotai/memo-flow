@@ -42,8 +42,7 @@
     --input: 120 20% 85%;
     --ring: 140 40% 25%;
 
-    /* Increased border radius for organic feel */
-    --radius: 1rem;
+    --radius: 0.625rem;
   }
 
   .dark {

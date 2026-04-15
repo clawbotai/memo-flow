@@ -38,7 +38,7 @@ export function ProviderIdentity({ provider, active }: ProviderIdentityProps) {
     <div className="flex min-w-0 items-center gap-3">
       <div
         className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-gradient-to-br shadow-[0_10px_26px_rgba(0,0,0,0.16)]",
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/5 bg-gradient-to-br shadow-[0_10px_26px_rgba(0,0,0,0.16)]",
           accent,
           active && "shadow-[0_16px_32px_rgba(0,0,0,0.22)]",
         )}
@@ -70,7 +70,7 @@ export function ProviderSidebarItem({ provider, isActive, isDirty, onClick }: Pr
       type="button"
       onClick={onClick}
       className={cn(
-        "w-full rounded-[22px] border px-3 py-3 text-left transition-all",
+        "w-full rounded-xl border px-3 py-2.5 text-left transition-all",
         isActive
           ? "border-primary/25 bg-primary/[0.06] shadow-[0_14px_28px_rgba(0,0,0,0.14)]"
           : "border-border/60 bg-background/45 hover:border-border hover:bg-background/65",
@@ -106,7 +106,7 @@ interface ProviderSidebarProps {
 
 export function ProviderSidebar({ providers, activeProviderId, dirtyProviderIds, onProviderSelect }: ProviderSidebarProps) {
   return (
-    <aside className="rounded-[28px] border border-border/70 bg-card/85 p-3 shadow-[0_20px_55px_rgba(0,0,0,0.16)]">
+    <aside className="rounded-2xl border border-border/70 bg-card/85 p-3 shadow-[0_20px_55px_rgba(0,0,0,0.16)]">
       <div className="border-b border-border/60 px-2 pb-3">
         <div className="text-sm font-semibold text-foreground">供应商列表</div>
         <p className="mt-1 text-xs text-muted-foreground">点击左侧供应商，在右侧查看和编辑其配置。</p>

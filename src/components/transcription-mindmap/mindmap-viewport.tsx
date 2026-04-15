@@ -82,11 +82,11 @@ export function MindMapViewport({
     <div
       ref={viewportRef}
       className={cn(
-        "relative flex h-full min-h-0 w-full overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.92),_rgba(244,247,241,0.95)_45%,_rgba(238,244,236,0.98)_100%)]",
+        "relative flex h-full min-h-0 w-full overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.92),_rgba(244,247,241,0.95)_45%,_rgba(238,244,236,0.98)_100%)]",
         fullscreen && "rounded-none shadow-[0_28px_80px_rgba(20,33,23,0.22)]",
       )}
     >
-      <div className="absolute right-5 top-4 z-20 flex items-center gap-0.5 rounded-[18px] border border-white/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(251,252,249,0.72))] p-[3px] shadow-[0_14px_32px_rgba(26,44,30,0.1)] ring-1 ring-black/[0.04] backdrop-blur-2xl">
+      <div className="absolute right-5 top-4 z-20 flex items-center gap-0.5 rounded-xl border border-white/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(251,252,249,0.72))] p-[3px] shadow-[0_14px_32px_rgba(26,44,30,0.1)] ring-1 ring-black/[0.04] backdrop-blur-2xl">
         <button type="button" onClick={onCopyOutline} className={topToolbarButtonClass}>
           <Copy className="h-[14px] w-[14px]" strokeWidth={1.85} />
           复制
@@ -114,7 +114,7 @@ export function MindMapViewport({
 
       {selectedNode && editMode && (
         <div
-          className="absolute z-30 -translate-x-1/2 -translate-y-full rounded-2xl border border-border/60 bg-background/92 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.16)] backdrop-blur-md"
+          className="absolute z-30 -translate-x-1/2 -translate-y-full rounded-xl border border-border/60 bg-background/92 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.16)] backdrop-blur-md"
           style={{
             left: `${Math.max(96, Math.min(selectedNode.left, (viewportRef.current?.clientWidth || 0) - 96))}px`,
             top: `${Math.max(54, selectedNode.top - 14)}px`,
@@ -154,7 +154,7 @@ export function MindMapViewport({
 
       <div ref={canvasRef} className="h-full w-full cursor-grab active:cursor-grabbing" />
 
-      <div className="absolute bottom-4 right-4 z-20 flex items-center gap-0.5 rounded-[20px] border border-white/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(248,251,246,0.72))] p-1 shadow-[0_18px_42px_rgba(21,37,23,0.12)] ring-1 ring-black/[0.04] backdrop-blur-2xl">
+      <div className="absolute bottom-4 right-4 z-20 flex items-center gap-0.5 rounded-xl border border-white/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(248,251,246,0.72))] p-1 shadow-[0_18px_42px_rgba(21,37,23,0.12)] ring-1 ring-black/[0.04] backdrop-blur-2xl">
         <button type="button" className={bottomToolbarButtonClass} onClick={onZoomOut} title="缩小">
           <ZoomOut className="h-4 w-4" strokeWidth={1.9} />
         </button>
