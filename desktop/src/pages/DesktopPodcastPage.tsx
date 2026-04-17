@@ -377,8 +377,8 @@ export function DesktopPodcastPage() {
       closeEventSource();
 
       try {
-        if (!podcastUrl.includes("xiaoyuzhoufm.com")) {
-          setToast({ message: "目前仅支持小宇宙播客链接", type: "error" });
+        if (!/\/episode\/[a-f0-9]+/i.test(podcastUrl)) {
+          setToast({ message: "目前仅支持兼容的播客单集链接", type: "error" });
           return;
         }
 
@@ -550,7 +550,7 @@ export function DesktopPodcastPage() {
       <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-semibold">播客转录</h1>
-          <p className="mt-1 text-muted-foreground">粘贴小宇宙播客链接，自动转录为文字</p>
+          <p className="mt-1 text-muted-foreground">粘贴播客单集链接，自动转录为文字</p>
         </div>
 
         {toast && (
@@ -570,13 +570,13 @@ export function DesktopPodcastPage() {
             <form onSubmit={handlePodcastTranscribe} className="space-y-4">
               <div>
                 <label htmlFor="podcast-url" className="mb-2 block text-sm font-medium">
-                  小宇宙播客链接
+                  播客单集链接
                 </label>
                 <div className="flex gap-2">
                   <Input
                     id="podcast-url"
                     type="text"
-                    placeholder="https://www.xiaoyuzhoufm.com/episode/..."
+                    placeholder="https://podcast.example.com/episode/..."
                     value={podcastUrl}
                     onChange={(e) => setPodcastUrl(e.target.value)}
                     className="flex-1"
@@ -598,7 +598,7 @@ export function DesktopPodcastPage() {
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  输入小宇宙播客链接，自动提取音频并转录为文字。本地 Whisper 的安装、模型下载和路径配置都在「设置 → Whisper 设置」里完成。
+                  输入播客单集链接，自动提取音频并转录为文字。本地 Whisper 的安装、模型下载和路径配置都在「设置 → Whisper 设置」里完成。
                 </p>
               </div>
             </form>

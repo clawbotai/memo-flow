@@ -140,7 +140,7 @@ async function fetchFromThirdPartyApi(episodeId, signal) {
 async function fetchEpisodeInfo(url, signal) {
   const episodeId = extractEpisodeId(url);
   if (!episodeId) {
-    throw new Error('无效的小宇宙链接格式，请确认链接包含 /episode/ 路径');
+    throw new Error('无效的播客链接格式，请确认链接包含 /episode/ 路径');
   }
 
   const fromApi = await fetchFromOfficialApi(episodeId, signal);
