@@ -31,7 +31,7 @@ interface MenuItem {
 }
 
 const mainMenuItems: MenuItem[] = [
-  { id: "home", label: "首页", icon: <Home className="w-4 h-4" />, available: true },
+  // 首页已隐藏：{ id: "home", label: "首页", icon: <Home className="w-4 h-4" />, available: true },
   { id: "podcast", label: "播客转录", icon: <Mic className="w-4 h-4" />, available: true },
   { id: "history", label: "转录历史", icon: <History className="w-4 h-4" />, available: true },
   { id: "analyze", label: "内容解析", icon: <FileSearch className="w-4 h-4" />, available: false },
@@ -47,7 +47,8 @@ function getActivePage(pathname: string): PageId {
     return "podcast";
   }
 
-  return "home";
+  // 首页已隐藏，默认不返回 home
+  return "podcast";
 }
 
 export function DesktopSidebar({ open, onOpenSettings }: DesktopSidebarProps) {
