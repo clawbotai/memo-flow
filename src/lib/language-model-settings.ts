@@ -9,6 +9,7 @@ import type {
 } from "@/types";
 import { helperRequest } from "@/lib/local-helper-client";
 import { normalizeLanguageModelSettings } from "@/lib/language-models";
+import { emitLanguageModelSettingsChanged } from "@/lib/language-model-events";
 import {
   mergeCachedLanguageModelSettings,
   readCachedLanguageModelSettings,
@@ -45,6 +46,7 @@ export async function saveLanguageModelSettings(
 
   const nextSettings = normalizeLanguageModelSettings(response.data);
   writeCachedLanguageModelSettings(nextSettings);
+  emitLanguageModelSettingsChanged();
   return nextSettings;
 }
 

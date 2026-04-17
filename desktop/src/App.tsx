@@ -5,6 +5,7 @@ import { DesktopHomePage } from "@desktop/pages/DesktopHomePage";
 import { DesktopPodcastPage } from "@desktop/pages/DesktopPodcastPage";
 import { DesktopTranscriptionDetailPage } from "@desktop/pages/DesktopTranscriptionDetailPage";
 import { DesktopTranscriptionsPage } from "@desktop/pages/DesktopTranscriptionsPage";
+import { DesktopSettingsPage } from "@desktop/pages/DesktopSettingsPage";
 
 const router = createHashRouter([
   {
@@ -26,6 +27,10 @@ const router = createHashRouter([
       {
         path: "/transcriptions/:id",
         element: <DesktopTranscriptionDetailPage />,
+      },
+      {
+        path: "/settings",
+        element: <DesktopSettingsPage />,
       },
     ],
   },

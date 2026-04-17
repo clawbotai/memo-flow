@@ -1,6 +1,6 @@
 'use client';
 
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { AppSettingsDialog, type SettingsSection } from "@/components/whisper-settings";
@@ -12,6 +12,7 @@ export interface DesktopShellContext {
 }
 
 export function DesktopAppShell() {
+  const navigate = useNavigate();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
@@ -30,7 +31,7 @@ export function DesktopAppShell() {
         />
         <DesktopSidebar
           open={sidebarOpen}
-          onOpenSettings={() => openSettings("general")}
+          onOpenSettings={() => navigate("/settings?section=general")}
         />
         <main
           className={cn(

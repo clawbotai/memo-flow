@@ -49,7 +49,9 @@
       "Bash(cp app-icon-1024.png icon.iconset/icon_512x512@2x.png)",
       "Bash(cp app-icon-1024.png icon.iconset/icon_1024x1024.png)",
       "Bash(rm -rf icon.iconset)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(npm run *)",
+      "Bash(git add *)"
     ],
     "defaultMode": "bypassPermissions"
   }

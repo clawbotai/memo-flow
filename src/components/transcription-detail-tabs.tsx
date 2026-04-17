@@ -220,10 +220,11 @@ function TranscriptTabPanel({
 }
 
 function ContentTabPanel({
+  isActive,
   liveRecord,
   onRecordPatch,
-}: Pick<TranscriptionDetailTabsProps, 'liveRecord' | 'onRecordPatch'>) {
-  return <TranscriptionContentGeneration record={liveRecord} onRecordPatch={onRecordPatch} />;
+}: Pick<TranscriptionDetailTabsProps, 'liveRecord' | 'onRecordPatch'> & { isActive: boolean }) {
+  return <TranscriptionContentGeneration record={liveRecord} onRecordPatch={onRecordPatch} isActive={isActive} />;
 }
 
 function MindmapTabPanel({
@@ -256,7 +257,7 @@ export function TranscriptionDetailTabs(props: TranscriptionDetailTabsProps) {
         </TabsContent>
 
         <TabsContent value="content" className="mt-0 flex h-full min-h-0 flex-1 flex-col border-0 bg-transparent p-0 data-[state=inactive]:hidden">
-          <ContentTabPanel liveRecord={props.liveRecord} onRecordPatch={props.onRecordPatch} />
+          <ContentTabPanel isActive={activeTab === 'content'} liveRecord={props.liveRecord} onRecordPatch={props.onRecordPatch} />
         </TabsContent>
 
         <TabsContent value="mindmap" className="mt-0 flex h-full min-h-0 flex-1 flex-col border-0 bg-transparent p-0 data-[state=inactive]:hidden">

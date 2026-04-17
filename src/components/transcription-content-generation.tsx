@@ -12,6 +12,7 @@ import {
   generateContentDraft,
   generateContentPoints,
 } from '@/lib/content-generation';
+import { LANGUAGE_MODEL_SETTINGS_CHANGED_EVENT } from '@/lib/language-model-events';
 import { fetchLanguageModelSettings } from '@/lib/language-model-settings';
 import { getEnabledLanguageModelOptions } from '@/lib/language-models';
 import type {
@@ -34,6 +35,7 @@ interface ProviderOption {
 interface TranscriptionContentGenerationProps {
   record: TranscriptionRecord;
   onRecordPatch: (patch: Partial<TranscriptionRecord>) => void;
+  isActive?: boolean;
 }
 
 const PLATFORM_OPTIONS: Array<{ value: ContentPlatform; label: string }> = [
@@ -125,6 +127,7 @@ function PointCard({
 export function TranscriptionContentGeneration({
   record,
   onRecordPatch,
+  isActive = false,
 }: TranscriptionContentGenerationProps) {
   const requestRecordIdRef = useRef('');
   const [providers, setProviders] = useState<ProviderOption[]>([]);
@@ -193,6 +196,33 @@ export function TranscriptionContentGeneration({
     return () => clearTimeout(timer);
   }, [copied]);
 
+  const loadProviders = async (recordId: string) => {
+    setLoadingProviders(true);
+    try {
+      const settings = await fetchLanguageModelSettings();
+      if (requestRecordIdRef.current !== recordId) {
+        return;
+      }
+
+      const nextProviders = getEnabledLanguageModelOptions(settings);
+      setProviders(nextProviders);
+      setSelectedModelKey((prev) => {
+        if (prev && nextProviders.some((item) => item.value === prev)) {
+          return prev;
+        }
+        return nextProviders[0]?.value ?? '';
+      });
+    } catch (error) {
+      if (requestRecordIdRef.current === recordId) {
+        showToast(error instanceof Error ? error.message : '读取模型配置失败', 'error');
+      }
+    } finally {
+      if (requestRecordIdRef.current === recordId) {
+        setLoadingProviders(false);
+      }
+    }
+  };
+
   useEffect(() => {
     requestRecordIdRef.current = record.id;
     setPoints([]);
@@ -202,34 +232,6 @@ export function TranscriptionContentGeneration({
     setPlatform('redbook');
     setExtracting(false);
     setGenerating(false);
-
-    const loadProviders = async () => {
-      setLoadingProviders(true);
-      try {
-        const settings = await fetchLanguageModelSettings();
-        if (requestRecordIdRef.current !== record.id) {
-          return;
-        }
-
-        const nextProviders = getEnabledLanguageModelOptions(settings);
-
-        setProviders(nextProviders);
-        setSelectedModelKey((prev) => {
-          if (prev && nextProviders.some((item) => item.value === prev)) {
-            return prev;
-          }
-          return nextProviders[0]?.value ?? '';
-        });
-      } catch (error) {
-        if (requestRecordIdRef.current === record.id) {
-          showToast(error instanceof Error ? error.message : '读取模型配置失败', 'error');
-        }
-      } finally {
-        if (requestRecordIdRef.current === record.id) {
-          setLoadingProviders(false);
-        }
-      }
-    };
 
     const loadPersistedData = async () => {
       if (!record.savedPath) {
@@ -279,13 +281,36 @@ export function TranscriptionContentGeneration({
       }
     };
 
-    void loadProviders();
+    void loadProviders(record.id);
     void loadPersistedData();
 
     return () => {
       requestRecordIdRef.current = '';
     };
   }, [record.id, record.savedPath]);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    void loadProviders(record.id);
+  }, [isActive, record.id]);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    const handleSettingsChanged = () => {
+      void loadProviders(requestRecordIdRef.current || record.id);
+    };
+
+    window.addEventListener(LANGUAGE_MODEL_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
+    return () => {
+      window.removeEventListener(LANGUAGE_MODEL_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
+    };
+  }, [isActive, record.id]);
 
   const handleTogglePoint = (pointId: string) => {
     setSelectedPointIds((prev) => (
