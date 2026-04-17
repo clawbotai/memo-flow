@@ -57,7 +57,7 @@ export function DesktopHomePage() {
     {
       icon: <Mic className="w-5 h-5" />,
       title: "播客转录",
-      description: "粘贴播客单集链接，自动转录为文字",
+      description: "支持小宇宙 / Apple Podcasts 单集链接转录",
       href: "/podcast",
       available: true,
     },

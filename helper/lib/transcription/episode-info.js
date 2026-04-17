@@ -1,8 +1,95 @@
 'use strict';
 
-function extractEpisodeId(url) {
+const PODCAST_SOURCE = Object.freeze({
+  XIAOYUZHOU: 'xiaoyuzhou',
+  APPLE_EPISODE: 'apple-episode',
+  APPLE_SHOW: 'apple-show',
+  APPLE_INVALID: 'apple-invalid',
+  UNKNOWN: 'unknown',
+});
+
+const APPLE_EPISODE_ONLY_ERROR =
+  '当前仅支持 Apple Podcasts 单集链接，请打开具体单集后重新分享链接。';
+const APPLE_INVALID_LINK_ERROR = '无效的 Apple Podcasts 链接，请确认链接包含节目和单集信息。';
+const APPLE_EPISODE_PARSE_ERROR =
+  '暂时无法从该 Apple 链接解析出单集音频，请确认是单集分享链接后重试。';
+
+function parseUrl(url) {
+  try {
+    return new URL(String(url || '').trim());
+  } catch {
+    return null;
+  }
+}
+
+function extractXiaoyuzhouEpisodeId(url) {
   const match = String(url || '').match(/episode\/([a-f0-9]+)/i);
   return match ? match[1] : '';
+}
+
+function extractEpisodeId(url) {
+  return extractXiaoyuzhouEpisodeId(url);
+}
+
+function detectPodcastSource(url) {
+  const parsedUrl = parseUrl(url);
+
+  if (parsedUrl) {
+    if (parsedUrl.hostname === 'podcasts.apple.com') {
+      const hasCollectionId = /\/id(\d+)/i.test(parsedUrl.pathname);
+      const trackId = parsedUrl.searchParams.get('i');
+
+      if (!hasCollectionId) {
+        return PODCAST_SOURCE.APPLE_INVALID;
+      }
+
+      if (!trackId) {
+        return PODCAST_SOURCE.APPLE_SHOW;
+      }
+
+      if (!/^\d+$/.test(trackId)) {
+        return PODCAST_SOURCE.APPLE_INVALID;
+      }
+
+      return PODCAST_SOURCE.APPLE_EPISODE;
+    }
+
+    if (
+      (parsedUrl.hostname === 'www.xiaoyuzhoufm.com' || parsedUrl.hostname === 'xiaoyuzhoufm.com') &&
+      extractXiaoyuzhouEpisodeId(parsedUrl.pathname)
+    ) {
+      return PODCAST_SOURCE.XIAOYUZHOU;
+    }
+  }
+
+  if (extractXiaoyuzhouEpisodeId(url)) {
+    return PODCAST_SOURCE.XIAOYUZHOU;
+  }
+
+  return PODCAST_SOURCE.UNKNOWN;
+}
+
+function extractApplePodcastIds(url) {
+  const parsedUrl = parseUrl(url);
+  if (!parsedUrl || parsedUrl.hostname !== 'podcasts.apple.com') {
+    throw new Error(APPLE_INVALID_LINK_ERROR);
+  }
+
+  const collectionMatch = parsedUrl.pathname.match(/\/id(\d+)/i);
+  const trackId = parsedUrl.searchParams.get('i');
+
+  if (collectionMatch && !trackId) {
+    throw new Error(APPLE_EPISODE_ONLY_ERROR);
+  }
+
+  if (!collectionMatch || !trackId || !/^\d+$/.test(trackId)) {
+    throw new Error(APPLE_INVALID_LINK_ERROR);
+  }
+
+  return {
+    collectionId: collectionMatch[1],
+    trackId,
+  };
 }
 
 function createTimeoutSignal(timeoutMs, signal) {
@@ -11,6 +98,15 @@ function createTimeoutSignal(timeoutMs, signal) {
     return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
   }
   return signal;
+}
+
+function isTimeoutError(error) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return error.name === 'TimeoutError' || message.includes('timeout') || message.includes('timed out');
 }
 
 async function fetchFromOfficialApi(episodeId, signal) {
@@ -137,10 +233,10 @@ async function fetchFromThirdPartyApi(episodeId, signal) {
   }
 }
 
-async function fetchEpisodeInfo(url, signal) {
-  const episodeId = extractEpisodeId(url);
+async function fetchXiaoyuzhouEpisodeInfo(url, signal) {
+  const episodeId = extractXiaoyuzhouEpisodeId(url);
   if (!episodeId) {
-    throw new Error('无效的播客链接格式，请确认链接包含 /episode/ 路径');
+    throw new Error('无效的小宇宙单集链接，请确认链接包含 /episode/ 路径');
   }
 
   const fromApi = await fetchFromOfficialApi(episodeId, signal);
@@ -153,11 +249,152 @@ async function fetchEpisodeInfo(url, signal) {
   throw new Error('无法获取播客音频链接，请检查链接是否正确或稍后重试');
 }
 
+async function fetchAppleLookupResults(collectionId, signal) {
+  const lookupUrl = new URL('https://itunes.apple.com/lookup');
+  lookupUrl.searchParams.set('id', String(collectionId));
+  lookupUrl.searchParams.set('media', 'podcast');
+  lookupUrl.searchParams.set('entity', 'podcastEpisode');
+  lookupUrl.searchParams.set('limit', '200');
+
+  let response;
+  try {
+    response = await fetch(lookupUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        Accept: 'application/json',
+      },
+      signal: createTimeoutSignal(5000, signal),
+    });
+  } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
+
+    if (isTimeoutError(error)) {
+      throw new Error('网络请求超时，请稍后重试');
+    }
+
+    throw new Error(APPLE_EPISODE_PARSE_ERROR);
+  }
+
+  if (!response.ok) {
+    throw new Error(APPLE_EPISODE_PARSE_ERROR);
+  }
+
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(APPLE_EPISODE_PARSE_ERROR);
+  }
+
+  const results = Array.isArray(data?.results) ? data.results : [];
+  if (!results.length) {
+    throw new Error('该内容在您所在地区不可用');
+  }
+
+  return results;
+}
+
+async function validateAppleAudioUrl(audioUrl, signal) {
+  if (!audioUrl) {
+    throw new Error(APPLE_EPISODE_PARSE_ERROR);
+  }
+
+  try {
+    const response = await fetch(audioUrl, {
+      method: 'HEAD',
+      redirect: 'manual',
+      signal: createTimeoutSignal(5000, signal),
+    });
+
+    if (response.status === 200) {
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      if (contentType && !contentType.startsWith('audio/')) {
+        throw new Error(APPLE_EPISODE_PARSE_ERROR);
+      }
+    }
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (error instanceof Error && error.message === APPLE_EPISODE_PARSE_ERROR) {
+      throw error;
+    }
+  }
+}
+
+function mapAppleEpisodeInfo(results, episode) {
+  const collectionInfo =
+    results.find(
+      (item) => item && String(item.collectionId || '') === String(episode.collectionId || '') && !item.trackId,
+    ) || results[0];
+
+  const rawDuration = Number.parseInt(String(episode.trackTimeMillis || ''), 10);
+  return {
+    title: episode.trackName || collectionInfo?.collectionName || '未知标题',
+    description: episode.description || '',
+    audioUrl: episode.episodeUrl || '',
+    duration: Number.isFinite(rawDuration) && rawDuration > 0 ? Math.floor(rawDuration / 1000) : undefined,
+    pubDate: episode.releaseDate || new Date().toISOString(),
+    author: episode.artistName || collectionInfo?.collectionName || '未知作者',
+    thumbnail:
+      episode.artworkUrl600 ||
+      episode.artworkUrl100 ||
+      collectionInfo?.artworkUrl600 ||
+      collectionInfo?.artworkUrl100 ||
+      '',
+  };
+}
+
+async function fetchAppleEpisodeInfo(url, signal) {
+  const { collectionId, trackId } = extractApplePodcastIds(url);
+  const results = await fetchAppleLookupResults(collectionId, signal);
+  const episode = results.find((item) => String(item?.trackId || '') === String(trackId));
+
+  if (!episode) {
+    throw new Error(APPLE_EPISODE_PARSE_ERROR);
+  }
+
+  const mappedEpisode = mapAppleEpisodeInfo(results, episode);
+  if (!mappedEpisode.audioUrl) {
+    throw new Error(APPLE_EPISODE_PARSE_ERROR);
+  }
+
+  await validateAppleAudioUrl(mappedEpisode.audioUrl, signal);
+  return mappedEpisode;
+}
+
+async function fetchEpisodeInfo(url, signal) {
+  const source = detectPodcastSource(url);
+
+  if (source === PODCAST_SOURCE.XIAOYUZHOU) {
+    return fetchXiaoyuzhouEpisodeInfo(url, signal);
+  }
+
+  if (source === PODCAST_SOURCE.APPLE_EPISODE) {
+    return fetchAppleEpisodeInfo(url, signal);
+  }
+
+  if (source === PODCAST_SOURCE.APPLE_SHOW) {
+    throw new Error(APPLE_EPISODE_ONLY_ERROR);
+  }
+
+  if (source === PODCAST_SOURCE.APPLE_INVALID) {
+    throw new Error(APPLE_INVALID_LINK_ERROR);
+  }
+
+  throw new Error('无效的播客链接格式，请确认是小宇宙或 Apple Podcasts 单集链接');
+}
+
 module.exports = {
+  detectPodcastSource,
+  extractXiaoyuzhouEpisodeId,
   extractEpisodeId,
+  extractApplePodcastIds,
   createTimeoutSignal,
   fetchFromOfficialApi,
   fetchFromPageHtml,
   fetchFromThirdPartyApi,
+  fetchXiaoyuzhouEpisodeInfo,
+  fetchAppleEpisodeInfo,
   fetchEpisodeInfo,
 };

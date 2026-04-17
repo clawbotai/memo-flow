@@ -52,6 +52,66 @@ const LOCAL_RUNTIME_REQUIREMENT_LABELS: Record<string, string> = {
   model: "模型文件",
 };
 
+const PODCAST_INPUT_SOURCE = {
+  xiaoyuzhou: "xiaoyuzhou",
+  appleEpisode: "apple-episode",
+  appleShow: "apple-show",
+  appleInvalid: "apple-invalid",
+  unsupported: "unsupported",
+} as const;
+
+type PodcastInputSource = (typeof PODCAST_INPUT_SOURCE)[keyof typeof PODCAST_INPUT_SOURCE];
+
+function parsePodcastUrl(url: string): URL | null {
+  try {
+    return new URL(url.trim());
+  } catch {
+    return null;
+  }
+}
+
+function detectPodcastInputSource(rawUrl: string): PodcastInputSource {
+  const url = rawUrl.trim();
+  if (!url) {
+    return PODCAST_INPUT_SOURCE.unsupported;
+  }
+
+  const parsedUrl = parsePodcastUrl(url);
+  if (!parsedUrl) {
+    return /\/episode\/[a-f0-9]+/i.test(url)
+      ? PODCAST_INPUT_SOURCE.xiaoyuzhou
+      : PODCAST_INPUT_SOURCE.unsupported;
+  }
+
+  if (parsedUrl.hostname === "podcasts.apple.com") {
+    const hasCollectionId = /\/id(\d+)/i.test(parsedUrl.pathname);
+    const trackId = parsedUrl.searchParams.get("i");
+
+    if (!hasCollectionId) {
+      return PODCAST_INPUT_SOURCE.appleInvalid;
+    }
+
+    if (!trackId) {
+      return PODCAST_INPUT_SOURCE.appleShow;
+    }
+
+    return /^\d+$/.test(trackId)
+      ? PODCAST_INPUT_SOURCE.appleEpisode
+      : PODCAST_INPUT_SOURCE.appleInvalid;
+  }
+
+  if (
+    (parsedUrl.hostname === "www.xiaoyuzhoufm.com" || parsedUrl.hostname === "xiaoyuzhoufm.com") &&
+    /\/episode\/[a-f0-9]+/i.test(parsedUrl.pathname)
+  ) {
+    return PODCAST_INPUT_SOURCE.xiaoyuzhou;
+  }
+
+  return /\/episode\/[a-f0-9]+/i.test(url)
+    ? PODCAST_INPUT_SOURCE.xiaoyuzhou
+    : PODCAST_INPUT_SOURCE.unsupported;
+}
+
 export function DesktopPodcastPage() {
   const { config } = useTranscriptionConfig();
   const { openSettings } = useOutletContext<DesktopShellContext>();
@@ -363,6 +423,9 @@ export function DesktopPodcastPage() {
         return;
       }
 
+      const normalizedPodcastUrl = podcastUrl.trim();
+      const inputSource = detectPodcastInputSource(normalizedPodcastUrl);
+
       setPodcastTranscript("");
       setPodcastAudioInfo(null);
       setLiveSegments([]);
@@ -377,8 +440,24 @@ export function DesktopPodcastPage() {
       closeEventSource();
 
       try {
-        if (!/\/episode\/[a-f0-9]+/i.test(podcastUrl)) {
-          setToast({ message: "目前仅支持兼容的播客单集链接", type: "error" });
+        if (inputSource === PODCAST_INPUT_SOURCE.appleShow) {
+          setToast({
+            message: "当前仅支持 Apple Podcasts 单集链接，请打开具体单集后重新分享链接。",
+            type: "error",
+          });
+          return;
+        }
+
+        if (inputSource === PODCAST_INPUT_SOURCE.appleInvalid) {
+          setToast({
+            message: "无效的 Apple Podcasts 链接，请确认链接包含节目和单集信息。",
+            type: "error",
+          });
+          return;
+        }
+
+        if (inputSource === PODCAST_INPUT_SOURCE.unsupported) {
+          setToast({ message: "目前仅支持小宇宙或 Apple Podcasts 单集链接", type: "error" });
           return;
         }
 
@@ -423,7 +502,7 @@ export function DesktopPodcastPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            url: podcastUrl,
+            url: normalizedPodcastUrl,
             engine: config.activeEngine,
             onlineASRConfig: config.onlineASR,
           }),
@@ -550,7 +629,9 @@ export function DesktopPodcastPage() {
       <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-semibold">播客转录</h1>
-          <p className="mt-1 text-muted-foreground">粘贴播客单集链接，自动转录为文字</p>
+          <p className="mt-1 text-muted-foreground">
+            粘贴小宇宙或 Apple Podcasts 单集链接，自动转录为文字
+          </p>
         </div>
 
         {toast && (
@@ -570,13 +651,13 @@ export function DesktopPodcastPage() {
             <form onSubmit={handlePodcastTranscribe} className="space-y-4">
               <div>
                 <label htmlFor="podcast-url" className="mb-2 block text-sm font-medium">
-                  播客单集链接
+                  播客单集链接（小宇宙 / Apple Podcasts）
                 </label>
                 <div className="flex gap-2">
                   <Input
                     id="podcast-url"
                     type="text"
-                    placeholder="https://podcast.example.com/episode/..."
+                    placeholder="https://www.xiaoyuzhoufm.com/episode/... 或 https://podcasts.apple.com/.../id1234567890?i=100..."
                     value={podcastUrl}
                     onChange={(e) => setPodcastUrl(e.target.value)}
                     className="flex-1"
@@ -598,7 +679,7 @@ export function DesktopPodcastPage() {
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  输入播客单集链接，自动提取音频并转录为文字。本地 Whisper 的安装、模型下载和路径配置都在「设置 → Whisper 设置」里完成。
+                  当前支持小宇宙和 Apple Podcasts 的单集链接。输入后会自动提取音频并转录为文字。本地 Whisper 的安装、模型下载和路径配置都在「设置 → Whisper 设置」里完成。
                 </p>
               </div>
             </form>
