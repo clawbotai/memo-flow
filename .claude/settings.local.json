@@ -48,7 +48,8 @@
       "mcp__ide__executeCode",
       "Bash(cp app-icon-1024.png icon.iconset/icon_512x512@2x.png)",
       "Bash(cp app-icon-1024.png icon.iconset/icon_1024x1024.png)",
-      "Bash(rm -rf icon.iconset)"
+      "Bash(rm -rf icon.iconset)",
+      "Bash(git commit *)"
     ],
     "defaultMode": "bypassPermissions"
   }

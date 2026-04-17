@@ -1,15 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Share2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TranscriptionDetailTabs } from '@/components/transcription-detail-tabs';
+import { ExportDialog } from '@/components/export/export-dialog';
 import { FlowLoader } from '@/components/ui/flow-loader';
 import type { TranscribeSegment } from '@/types';
 import { TranscriptionRecord } from '@/types/transcription-history';
 import { useTranscriptionConfig } from '@/hooks/use-transcription-config';
+import type { SettingsSection } from '@/components/whisper-settings';
 import {
   createHelperEventSource,
   helperRequest,
@@ -22,6 +25,7 @@ type ScrollToBottomFn = () => void;
 
 interface TranscriptionDetailProps {
   record: TranscriptionRecord;
+  onOpenSettings: (section?: SettingsSection) => void;
 }
 
 const STATUS_TEXT: Record<string, string> = {
@@ -43,11 +47,12 @@ const STATUS_COLOR: Record<string, string> = {
   error: 'bg-red-500',
 };
 
-const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => {
+const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record, onOpenSettings }) => {
   const { config } = useTranscriptionConfig();
   const [liveRecord, setLiveRecord] = useState<TranscriptionRecord>(record);
   const [connected, setConnected] = useState(false);
   const [retranscribing, setRetranscribing] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   // scrollToBottom 由 TranscriptTabPanel 通过 onScrollToBottomReady 注册，父组件持有引用即可
   const scrollToBottomRef = useRef<ScrollToBottomFn | null>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -200,6 +205,7 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
         contentGenerationStatus: 'idle',
         contentGenerationUpdatedAt: undefined,
         contentGenerationError: undefined,
+        exportState: undefined,
         updatedAt: new Date(),
       };
 
@@ -372,6 +378,36 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
       {/* ── 右侧：逐字稿 ── */}
       <div className="flex min-w-0 flex-1 flex-col">
         <Card className="flex min-h-[420px] flex-1 flex-col xl:min-h-0">
+          <CardHeader className="flex-row items-center justify-between border-b border-border/60 pb-3">
+            <div className="space-y-1">
+              <CardTitle className="text-base">转录详情</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                支持将当前转录导出到 IMA 或 Obsidian。
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {liveRecord.exportState?.ima?.status && (
+                <Badge variant="outline">
+                  IMA {liveRecord.exportState.ima.status === 'success' ? '已导出' : '失败'}
+                </Badge>
+              )}
+              {liveRecord.exportState?.obsidian?.status && (
+                <Badge variant="outline">
+                  Obsidian {liveRecord.exportState.obsidian.status === 'success' ? '已导出' : '失败'}
+                </Badge>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setExportDialogOpen(true)}
+              >
+                <Share2 className="mr-2 h-4 w-4" />
+                导出
+              </Button>
+            </div>
+          </CardHeader>
           <TranscriptionDetailTabs
             connected={connected}
             isActive={isActive}
@@ -384,6 +420,14 @@ const TranscriptionDetail: React.FC<TranscriptionDetailProps> = ({ record }) => 
           />
         </Card>
       </div>
+
+      <ExportDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        record={liveRecord}
+        onRecordPatch={handleRecordPatch}
+        onOpenSettings={onOpenSettings}
+      />
     </div>
   );
 };

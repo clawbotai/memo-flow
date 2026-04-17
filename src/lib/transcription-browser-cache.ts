@@ -64,6 +64,7 @@ function toCachedRecord(record: TranscriptionRecord): TranscriptionRecord {
     contentGenerationStatus: record.contentGenerationStatus,
     contentGenerationUpdatedAt: record.contentGenerationUpdatedAt,
     contentGenerationError: record.contentGenerationError,
+    exportState: record.exportState,
     segments: [],
     transcript: undefined,
   };

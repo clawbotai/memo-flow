@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  BookUp,
   Globe,
   Mic,
   Monitor,
@@ -18,7 +19,7 @@ import type {
 } from "@/types";
 import type { NormalizedWhisperStatus } from "@/lib/whisper-status";
 
-export type SettingsSection = "general" | "language-models" | "transcription" | "whisper";
+export type SettingsSection = "general" | "language-models" | "transcription" | "export" | "whisper";
 
 export interface SettingsSectionItem {
   id: SettingsSection;
@@ -45,6 +46,12 @@ export const SETTINGS_SECTIONS: SettingsSectionItem[] = [
     label: "转录",
     description: "语音识别引擎",
     icon: <Mic className="h-4 w-4" />,
+  },
+  {
+    id: "export",
+    label: "导出集成",
+    description: "IMA 与 Obsidian",
+    icon: <BookUp className="h-4 w-4" />,
   },
   {
     id: "whisper",

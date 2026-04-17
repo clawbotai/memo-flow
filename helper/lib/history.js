@@ -20,10 +20,25 @@ function toIsoDate(value) {
 }
 
 function serializeRecord(record) {
+  const exportState = record?.exportState && typeof record.exportState === 'object'
+    ? Object.fromEntries(
+        Object.entries(record.exportState).map(([providerId, state]) => [
+          providerId,
+          state && typeof state === 'object'
+            ? {
+                ...state,
+                exportedAt: toIsoDate(state.exportedAt),
+              }
+            : state,
+        ]),
+      )
+    : undefined;
+
   return {
     ...record,
     createdAt: toIsoDate(record.createdAt),
     updatedAt: toIsoDate(record.updatedAt),
+    exportState,
   };
 }
 

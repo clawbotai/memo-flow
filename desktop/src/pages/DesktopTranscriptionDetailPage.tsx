@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
 import TranscriptionDetail from "@/components/transcription-detail";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FlowLoader } from "@/components/ui/flow-loader";
@@ -11,10 +11,12 @@ import {
   mergeCachedTranscriptionHistory,
 } from "@/lib/transcription-browser-cache";
 import type { TranscriptionRecord } from "@/types/transcription-history";
+import type { DesktopShellContext } from "@desktop/components/DesktopAppShell";
 import { PageScene } from "@desktop/components/PageScene";
 
 export function DesktopTranscriptionDetailPage() {
   const { id = "" } = useParams();
+  const { openSettings } = useOutletContext<DesktopShellContext>();
   const [record, setRecord] = useState<TranscriptionRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -67,7 +69,7 @@ export function DesktopTranscriptionDetailPage() {
                 </div>
               </div>
             ) : record ? (
-              <TranscriptionDetail record={record} />
+              <TranscriptionDetail record={record} onOpenSettings={openSettings} />
             ) : (
               <div className="flex min-h-[320px] flex-1 items-center justify-center">
                 <div className="text-center">

@@ -27,6 +27,7 @@ const MODELS_DIR = path.join(APP_DIR, 'models');
 const HISTORY_FILE = path.join(APP_DIR, 'transcription-history.json');
 const CONFIG_FILE = path.join(APP_DIR, 'whisper-config.json');
 const LANGUAGE_MODEL_CONFIG_FILE = path.join(APP_DIR, 'language-model-config.json');
+const EXPORT_CONFIG_FILE = path.join(APP_DIR, 'export-config.json');
 const TEMP_DIR = path.join(os.tmpdir(), 'memo-flow-helper');
 
 async function ensureAppDirs() {
@@ -41,6 +42,7 @@ module.exports = {
   HISTORY_FILE,
   CONFIG_FILE,
   LANGUAGE_MODEL_CONFIG_FILE,
+  EXPORT_CONFIG_FILE,
   TEMP_DIR,
   ensureAppDirs,
 };

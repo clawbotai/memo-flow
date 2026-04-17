@@ -1,5 +1,6 @@
 import type { TranscribeSegment } from './index';
 import type { MindMapGeneratorInfo } from './mindmap';
+import type { ExportStateMap } from './export';
 
 export interface TranscriptionRecord {
   id: string;                   // 转录记录唯一ID
@@ -28,6 +29,7 @@ export interface TranscriptionRecord {
   contentGenerationStatus?: 'idle' | 'generating' | 'ready' | 'error';
   contentGenerationUpdatedAt?: Date;
   contentGenerationError?: string;
+  exportState?: ExportStateMap;
 }
 
 export interface TranscriptionHistoryState {

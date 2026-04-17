@@ -314,6 +314,7 @@ async function runRetranscription(taskId, engine, onlineASRConfig) {
       mindmapPath: undefined,
       mindmapError: undefined,
       mindmapGenerator: undefined,
+      exportState: undefined,
     });
 
     await runEngine(

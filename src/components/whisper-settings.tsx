@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ExportIntegrationsPanel } from "@/components/app-settings/export-integrations-panel";
 import { LanguageModelSettingsPanel } from "@/components/language-model-settings-panel";
 import { GeneralSettingsPanel } from "@/components/app-settings/general-settings-panel";
 import { SettingsSidebar } from "@/components/app-settings/settings-sidebar";
@@ -51,6 +52,7 @@ export function AppSettingsDialog({
             <GeneralSettingsPanel visible={activeSection === "general"} />
             <LanguageModelSettingsPanel visible={activeSection === "language-models"} />
             <TranscriptionEnginePanel visible={activeSection === "transcription"} />
+            <ExportIntegrationsPanel visible={activeSection === "export"} />
             <WhisperPanel
               open={open}
               visible={activeSection === "whisper"}

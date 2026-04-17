@@ -18,6 +18,17 @@ const {
   mergeLanguageModelSettings,
 } = require('./config');
 const {
+  listProviders: listExportProviders,
+  getSanitizedConfig: getSanitizedExportConfig,
+  testProvider: testExportProvider,
+  executeExport,
+  saveProviderConfig: saveExportProviderConfig,
+  sanitizeProviderConfig,
+  EXPORT_ERROR_CODES,
+  ExportError,
+  isExportError,
+} = require('./export');
+const {
   buildWhisperStatus,
   syncDetectedRuntimeIntoConfig,
   normalizeInstallComponents,
@@ -32,6 +43,7 @@ const {
   removeRecord,
   reconcileInterruptedRecords,
   importMissingTranscriptHistory,
+  createRecordUpdateEmitter,
 } = require('./history');
 const {
   cancelTask,
@@ -50,7 +62,6 @@ const {
   runNewTranscription,
   runRetranscription,
 } = require('./transcription');
-const { createRecordUpdateEmitter } = require('./history');
 const state = require('./state');
 
 // ─── Model download ────────────────────────────────────────────────────────────
@@ -261,6 +272,42 @@ async function handleRequest(req, res) {
       return;
     }
 
+    if (req.method === 'GET' && pathname === '/export/providers') {
+      const providers = await listExportProviders();
+      sendJson(res, 200, { success: true, data: { providers } });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/export/config') {
+      const config = await getSanitizedExportConfig();
+      sendJson(res, 200, { success: true, data: config });
+      return;
+    }
+
+    const exportConfigMatch = pathname.match(/^\/export\/config\/([^/]+)$/);
+    if (exportConfigMatch && req.method === 'PUT') {
+      const providerId = exportConfigMatch[1];
+      const body = await readJsonBody(req);
+      const saved = await saveExportProviderConfig(providerId, body);
+      sendJson(res, 200, {
+        success: true,
+        data: {
+          providerId,
+          config: sanitizeProviderConfig(providerId, saved),
+        },
+      });
+      return;
+    }
+
+    const exportConfigTestMatch = pathname.match(/^\/export\/config\/([^/]+)\/test$/);
+    if (exportConfigTestMatch && req.method === 'POST') {
+      const providerId = exportConfigTestMatch[1];
+      const body = await readJsonBody(req);
+      const result = await testExportProvider(providerId, body);
+      sendJson(res, 200, { success: true, data: result });
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/whisper/status') {
       const config = await loadConfig();
       sendJson(res, 200, { success: true, data: buildWhisperStatus(config) });
@@ -421,6 +468,47 @@ async function handleRequest(req, res) {
 
       await removeRecord(taskId);
       sendJson(res, 200, { success: true, data: { id: taskId } });
+      return;
+    }
+
+    const transcriptionExportMatch = pathname.match(/^\/transcriptions\/([^/]+)\/export$/);
+    if (transcriptionExportMatch && req.method === 'POST') {
+      const taskId = transcriptionExportMatch[1];
+      const body = await readJsonBody(req);
+      const providerId = typeof body.providerId === 'string' ? body.providerId : '';
+      if (!providerId) {
+        sendJson(res, 400, { success: false, error: '未指定导出平台' });
+        return;
+      }
+
+      const updateRecord = createRecordUpdateEmitter(taskId);
+      try {
+        const result = await executeExport(taskId, providerId);
+        await updateRecord({
+          exportState: {
+            ...((await getRecord(taskId))?.exportState || {}),
+            [providerId]: {
+              status: result.status,
+              exportedAt: result.exportedAt,
+              targetRef: result.targetRef,
+              errorMessage: result.errorMessage,
+            },
+          },
+        });
+        sendJson(res, 200, { success: true, data: result });
+      } catch (error) {
+        await updateRecord({
+          exportState: {
+            ...((await getRecord(taskId))?.exportState || {}),
+            [providerId]: {
+              status: 'failed',
+              exportedAt: new Date().toISOString(),
+              errorMessage: error instanceof Error ? error.message : '导出失败',
+            },
+          },
+        });
+        throw error;
+      }
       return;
     }
 
@@ -832,6 +920,24 @@ async function handleRequest(req, res) {
 
     sendJson(res, 404, { success: false, error: 'Not Found' });
   } catch (error) {
+    if (isExportError(error)) {
+      const statusCode = error.code === EXPORT_ERROR_CODES.PLATFORM_NOT_CONFIGURED
+        || error.code === EXPORT_ERROR_CODES.EXPORT_SOURCE_NOT_READY
+        ? 400
+        : error.code === EXPORT_ERROR_CODES.AUTH_FAILED
+          ? 401
+          : error.code === EXPORT_ERROR_CODES.CLI_NOT_FOUND
+            ? 404
+            : 500;
+
+      sendJson(res, statusCode, {
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+      return;
+    }
+
     sendJson(res, error?.statusCode || 500, {
       success: false,
       error: error instanceof Error ? error.message : 'helper 请求失败',

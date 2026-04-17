@@ -164,3 +164,4 @@ export interface LocalRuntimeInstallProgress {
 export type TranscriptionConfig = BrowserTranscriptionConfig;
 
 export * from './content-generation';
+export * from './export';
